@@ -160,6 +160,12 @@ textarea { resize: vertical; min-height: 72px; font-family: monospace; font-size
 .center { text-align: center; }
 .spacer { flex: 1; }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
 .stub {
   padding: 15px 17px; border-radius: 14px; border: 1px dashed var(--line);
   background: rgba(233, 183, 95, 0.06); font-size: 13.5px; line-height: 1.5; color: var(--gold-l);

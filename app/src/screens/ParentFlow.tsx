@@ -2,23 +2,38 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
+import { PinEntry } from "../components/PinEntry";
 import { isValidNwcUrl, getBalanceSats, getBudget } from "../lib/nwc";
-import { loadState, saveState, clearState, type ParentState } from "../lib/storage";
+import {
+  loadState,
+  saveState,
+  clearState,
+  isParentUnlocked,
+  setParentUnlocked,
+  type ParentState,
+} from "../lib/storage";
 
-type Step = "connect" | "pair" | "home";
+type Step = "connect" | "pair" | "pin-setup" | "locked" | "home";
+
+function initialStep(existing: ReturnType<typeof loadState>): Step {
+  if (existing?.role !== "parent") return "connect";
+  if (existing.pin && !isParentUnlocked()) return "locked";
+  return "home";
+}
 
 export function ParentFlow() {
   const navigate = useNavigate();
   const existing = loadState();
-  const [step, setStep] = useState<Step>(
-    existing?.role === "parent" ? "home" : "connect"
-  );
+  const [step, setStep] = useState<Step>(initialStep(existing));
   const [nwcUrl, setNwcUrl] = useState(existing?.role === "parent" ? existing.nwcUrl : "");
   const [kidNickname, setKidNickname] = useState(
     existing?.role === "parent" ? existing.kidNickname : ""
   );
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+  const [pinDraft, setPinDraft] = useState<string | null>(null);
+  const [pinError, setPinError] = useState("");
+  const [pinShake, setPinShake] = useState(false);
 
   async function handleConnect() {
     setError("");
@@ -38,9 +53,35 @@ export function ParentFlow() {
   }
 
   function handleConfirmPairing() {
-    const state: ParentState = { role: "parent", nwcUrl, kidNickname: kidNickname || "your kid" };
-    saveState(state);
-    setStep("home");
+    setStep("pin-setup");
+  }
+
+  function handlePinSetupEntry(pin: string) {
+    if (pinDraft === null) {
+      setPinDraft(pin);
+      setPinError("");
+      return;
+    }
+    if (pin === pinDraft) {
+      const state: ParentState = { role: "parent", nwcUrl, kidNickname: kidNickname || "your kid", pin };
+      saveState(state);
+      setParentUnlocked();
+      setStep("home");
+    } else {
+      setPinError("Those didn't match — try again.");
+      setPinDraft(null);
+    }
+  }
+
+  function handleUnlockEntry(pin: string) {
+    if (existing?.role === "parent" && pin === existing.pin) {
+      setParentUnlocked();
+      setStep("home");
+    } else {
+      setPinShake(true);
+      setPinError("Wrong PIN, try again.");
+      setTimeout(() => setPinShake(false), 300);
+    }
   }
 
   function handleDisconnect() {
@@ -108,6 +149,54 @@ export function ParentFlow() {
           </div>
           <button className="btn" onClick={handleConfirmPairing}>
             They've scanned it
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "pin-setup") {
+    return (
+      <div className="wrap">
+        <Hud />
+        <div className="screen">
+          <div className="stack center">
+            <h2>{pinDraft === null ? "Set a PIN" : "Confirm your PIN"}</h2>
+            <p className="lede">
+              {pinDraft === null
+                ? "This keeps the allowance and disconnect controls to you."
+                : "Enter it again to confirm."}
+            </p>
+          </div>
+          {pinError && (
+            <p className="small center" style={{ color: "var(--err)" }}>
+              {pinError}
+            </p>
+          )}
+          <PinEntry onComplete={handlePinSetupEntry} />
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "locked") {
+    return (
+      <div className="wrap">
+        <Hud />
+        <div className="screen">
+          <div className="stack center">
+            <h2>Enter your PIN</h2>
+            <p className="lede">Protecting {existing?.role === "parent" ? existing.kidNickname : ""}'s allowance controls.</p>
+          </div>
+          {pinError && (
+            <p className="small center" style={{ color: "var(--err)" }}>
+              {pinError}
+            </p>
+          )}
+          <PinEntry onComplete={handleUnlockEntry} shake={pinShake} />
+          <div className="spacer" />
+          <button className="btn ghost sm" onClick={handleDisconnect}>
+            Forgot it? Disconnect and set up again
           </button>
         </div>
       </div>

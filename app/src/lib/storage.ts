@@ -16,6 +16,7 @@ export type ParentState = {
   role: "parent";
   nwcUrl: string;
   kidNickname: string;
+  pin?: string;
 };
 
 type AppState = KidState | ParentState;
@@ -38,4 +39,15 @@ export function saveState(state: AppState) {
 
 export function clearState() {
   localStorage.removeItem(KEY);
+  sessionStorage.removeItem(UNLOCK_KEY);
+}
+
+const UNLOCK_KEY = "zapsavr.parentUnlocked";
+
+export function isParentUnlocked(): boolean {
+  return sessionStorage.getItem(UNLOCK_KEY) === "1";
+}
+
+export function setParentUnlocked() {
+  sessionStorage.setItem(UNLOCK_KEY, "1");
 }

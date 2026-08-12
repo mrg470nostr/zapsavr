@@ -26,6 +26,14 @@ NWC still needs a live relay connection and a completed Lightning payment at the
 
 Sources: [Cashu.space](https://cashu.space/), [Learn about Cashu](https://docs.cashu.space/resources/learn), [Awesome Cashu](https://github.com/cashubtc/awesome-cashu), [Nut November recap](https://nutnovember.org/)
 
+## Ark status check (2026-08-12): the protocol is live, the Lightning bridge just isn't
+
+`docs/ARCHITECTURE.md` flags Ark/Arkade as worth re-checking at build time. Checked now: Ark itself is not on hold. Ark Labs shipped Arkade as a public-beta mainnet Layer 2 built on VTXOs, non-custodial by design (a user can unilaterally exit even if the coordinating ASP disappears or misbehaves). What *is* currently on hold is Boltz, the swap service that bridges liquidity between Lightning channels and Arkade's offchain VTXOs ("Boltz x Arkade") — Boltz suspended its Lightning/Liquid swaps indefinitely on 2026-08-03 after a wave of AI-assisted exploit attempts outpaced its team. No funds were lost (Boltz is non-custodial), but the specific path that would let ZapSavr move sats between the NWC/Lightning side and an Ark-based offline layer is down while they regroup.
+
+Practical read for this project: don't pick Ark-via-Boltz as the offline layer while that bridge is suspended with no public timeline. This doesn't change the Cashu-first plan for Phase 1, and Ark standalone (without the Lightning bridge) is worth revisiting once Boltz is back or another bridge exists — re-check before Phase 3's mint/offline-layer decision, not before.
+
+Sources: [Ark Labs launches Arkade public beta](https://www.theblock.co/post/375271/ark-labs-arkade-public-beta-layer-2-bitcoin), [Boltz x Arkade](https://ark.boltz.exchange/), [Boltz halts swaps following AI-assisted cyber attacks](https://coinpedia.org/news/bitcoin-protocol-boltz-halts-swaps-following-ai-assisted-cyber-attacks/), [AI attack freezes Boltz](https://news.bitcoin.com/crypto-news/ai-attack-freezes-boltz-rattles-lightning-network-users/)
+
 ## What this means for the architecture
 
 Combine the two: NWC as the trust and permission bridge to a parent's real wallet, Cashu as the fast, offline spending layer funded from that connection. Neither one alone covers both "safe, budgeted, revocable" and "works without signal, feels instant." Together they do. This pairing is documented in `docs/ARCHITECTURE.md`.

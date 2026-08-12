@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { ActionCard } from "../components/ActionCard";
+import { QrScan } from "../components/QrScan";
 import { isValidNwcUrl, getBalanceSats, payInvoice, makeInvoice } from "../lib/nwc";
 import { loadState, saveState, clearState, type KidState } from "../lib/storage";
 
@@ -60,12 +61,14 @@ export function KidFlow() {
               <input type="text" placeholder="e.g. Leo" value={nickname} onChange={(e) => setNickname(e.target.value)} />
             </div>
             <div className="field">
-              <label>Paste the code (camera scan coming soon)</label>
+              <label>Scan or paste the code</label>
+              <QrScan onScan={setNwcUrl} />
               <textarea
                 placeholder="nostr+walletconnect://..."
                 value={nwcUrl}
                 onChange={(e) => setNwcUrl(e.target.value)}
                 rows={4}
+                style={{ marginTop: 8 }}
               />
             </div>
             {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
@@ -325,11 +328,13 @@ function PaySomeone({ nwcUrl, onClose }: { nwcUrl: string; onClose: () => void }
       <h3>Pay</h3>
       <div className="field">
         <label>Payment request</label>
+        <QrScan onScan={setInvoice} />
         <textarea
           placeholder="Paste or scan the payment request"
           value={invoice}
           onChange={(e) => setInvoice(e.target.value)}
           rows={4}
+          style={{ marginTop: 8 }}
         />
       </div>
       {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
