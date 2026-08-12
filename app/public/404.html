@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ZapSavr</title>
+    <script>
+      // GitHub Pages serves this for any unknown path (e.g. a refresh on /parent).
+      // Encode the real path into a query string and redirect to index.html,
+      // which decodes it back below. Standard trick for SPAs on static hosting.
+      var segmentCount = 1; // "/zapsavr/" — one path segment before the app routes
+      var l = window.location;
+      var path = l.pathname.split('/').slice(0, segmentCount + 1).join('/');
+      var rest = l.pathname.slice(path.length);
+      l.replace(
+        path + '/?p=' + encodeURIComponent(rest.replace(/^\//, '')) +
+        (l.search ? '&q=' + encodeURIComponent(l.search.slice(1).replace(/~and~/g, '&')) : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body></body>
+</html>
