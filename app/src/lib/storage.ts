@@ -12,11 +12,16 @@ export type KidState = {
   target: SavingTarget | null;
 };
 
+export type FamilyKid = {
+  id: string;
+  nickname: string;
+  nwcUrl: string;
+};
+
 export type ParentState = {
   role: "parent";
-  nwcUrl: string;
-  kidNickname: string;
   pin?: string;
+  kids: FamilyKid[];
 };
 
 type AppState = KidState | ParentState;
@@ -27,7 +32,10 @@ export function loadState(): AppState | null {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AppState;
+    const parsed = JSON.parse(raw) as AppState;
+    // Older single-kid shape isn't compatible with the family model — treat as absent.
+    if (parsed.role === "parent" && !Array.isArray(parsed.kids)) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -50,4 +58,8 @@ export function isParentUnlocked(): boolean {
 
 export function setParentUnlocked() {
   sessionStorage.setItem(UNLOCK_KEY, "1");
+}
+
+export function newKidId(): string {
+  return Math.random().toString(36).slice(2, 10);
 }

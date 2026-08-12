@@ -1,5 +1,12 @@
 import { NWCClient } from "@getalby/sdk";
-import { DEMO_URL, demoGetBalanceSats, demoGetBudget, demoMakeInvoice, demoPayInvoice } from "./demo";
+import {
+  isDemoUrl,
+  demoGetBalanceSats,
+  demoGetBudget,
+  demoMakeInvoice,
+  demoPayInvoice,
+  demoListTransactions,
+} from "./demo";
 
 /**
  * Every call here (outside demo mode) goes straight to the connection the
@@ -8,11 +15,11 @@ import { DEMO_URL, demoGetBalanceSats, demoGetBudget, demoMakeInvoice, demoPayIn
  * does that on every request, per the non-negotiable in CLAUDE.md.
  */
 
-export { DEMO_URL };
+export { demoUrlFor } from "./demo";
 
 export function isValidNwcUrl(url: string): boolean {
   const trimmed = url.trim();
-  if (trimmed === DEMO_URL) return true;
+  if (isDemoUrl(trimmed)) return true;
   try {
     NWCClient.parseWalletConnectUrl(trimmed);
     return true;
@@ -21,12 +28,14 @@ export function isValidNwcUrl(url: string): boolean {
   }
 }
 
+export { isDemoUrl };
+
 export function connect(nwcUrl: string): NWCClient {
   return new NWCClient({ nostrWalletConnectUrl: nwcUrl.trim() });
 }
 
 export async function getBalanceSats(nwcUrl: string): Promise<number> {
-  if (nwcUrl === DEMO_URL) return demoGetBalanceSats();
+  if (isDemoUrl(nwcUrl)) return demoGetBalanceSats(nwcUrl);
   const client = connect(nwcUrl);
   try {
     const { balance } = await client.getBalance();
@@ -38,7 +47,7 @@ export async function getBalanceSats(nwcUrl: string): Promise<number> {
 }
 
 export async function getBudget(nwcUrl: string) {
-  if (nwcUrl === DEMO_URL) return demoGetBudget();
+  if (isDemoUrl(nwcUrl)) return demoGetBudget(nwcUrl);
   const client = connect(nwcUrl);
   try {
     return await client.getBudget();
@@ -48,7 +57,7 @@ export async function getBudget(nwcUrl: string) {
 }
 
 export async function payInvoice(nwcUrl: string, invoice: string) {
-  if (nwcUrl === DEMO_URL) return demoPayInvoice(invoice);
+  if (isDemoUrl(nwcUrl)) return demoPayInvoice(nwcUrl, invoice);
   const client = connect(nwcUrl);
   try {
     return await client.payInvoice({ invoice: invoice.trim() });
@@ -58,10 +67,35 @@ export async function payInvoice(nwcUrl: string, invoice: string) {
 }
 
 export async function makeInvoice(nwcUrl: string, amountSats: number, description: string) {
-  if (nwcUrl === DEMO_URL) return demoMakeInvoice(amountSats, description);
+  if (isDemoUrl(nwcUrl)) return demoMakeInvoice(nwcUrl, amountSats, description);
   const client = connect(nwcUrl);
   try {
     return await client.makeInvoice({ amount: amountSats * 1000, description });
+  } finally {
+    client.close();
+  }
+}
+
+export type SimpleTx = {
+  type: "incoming" | "outgoing";
+  amountSats: number;
+  description: string;
+  at: number;
+};
+
+export async function listTransactions(nwcUrl: string, limit = 10): Promise<SimpleTx[]> {
+  if (isDemoUrl(nwcUrl)) {
+    return demoListTransactions(nwcUrl);
+  }
+  const client = connect(nwcUrl);
+  try {
+    const { transactions } = await client.listTransactions({ limit });
+    return transactions.map((t) => ({
+      type: t.type,
+      amountSats: Math.floor(t.amount / 1000),
+      description: t.description || (t.type === "incoming" ? "Received" : "Sent"),
+      at: t.settled_at ? t.settled_at * 1000 : t.created_at * 1000,
+    }));
   } finally {
     client.close();
   }

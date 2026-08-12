@@ -20,7 +20,11 @@ Put Phase 1 in the hands of a handful of kids in Santo Antonio do Pinhal. Watch 
 
 ## Phase 3 — Round out the loop
 
-Once Phase 1 survives contact with real kids, fill in what got deliberately deferred: multiple named saving spaces (built as free, instant, ledger-level buckets over one balance, not separate accounts, see `docs/ARCHITECTURE.md`), a friendlier parent view (maybe its own lightweight app rather than a mode toggle), per-transaction limits as a second guardrail beyond the weekly budget, a proper (if still simple) transaction history, and a decision on which Cashu mint(s) the community trusts long-term, or whether Ark/Arkade has matured enough by then to use instead.
+Once Phase 1 survives contact with real kids, fill in what got deliberately deferred: multiple named saving spaces (built as free, instant, ledger-level buckets over one balance, not separate accounts, see `docs/ARCHITECTURE.md`), per-transaction limits as a second guardrail beyond the weekly budget, and a decision on which Cashu mint(s) the community trusts long-term, or whether Ark/Arkade has matured enough by then to use instead.
+
+**The friendlier parent view, multi-kid support, and transaction history landed early** (2026-08-12), ahead of Phase 2 real-kid testing, because a family testing this with three kids needed it immediately to make sense of the app at all. See `docs/ARCHITECTURE.md`'s "Family model" section for the shape.
+
+**Automatic recurring allowance is explicitly not built yet**, and shouldn't be added as a simple client-side toggle. A Lightning invoice is single-use, so "pay this every week automatically" needs something with standing authority to act on a schedule, not just the parent tapping a button. Real options, none free of trade-offs: (a) the parent's own wallet, if it supports scheduled keysend payments, handles it entirely outside ZapSavr, zero new infrastructure, but depends on a feature not every wallet has; (b) a small, community-run scheduler service holding its own separately-scoped, tightly-capped NWC connection dedicated only to allowance payouts, independently revocable from the main connection — the same trust pattern already planned for the LNURL resolver in `docs/NOSTR_INTEGRATION.md`, so at least it's a familiar shape, not a new one. Option (a) is worth checking first since it needs nothing new; only build (b) if no wallet in real use supports it, and treat it as a security-reviewed addition, not a quick feature.
 
 ## Phase 4 — Only then, the rest of BITKIT
 

@@ -4,11 +4,13 @@ import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { ActionCard } from "../components/ActionCard";
 import { QrScan } from "../components/QrScan";
-import { isValidNwcUrl, getBalanceSats, payInvoice, makeInvoice, DEMO_URL } from "../lib/nwc";
+import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, payInvoice, makeInvoice } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
 import { loadState, saveState, clearState, type KidState } from "../lib/storage";
 
 type Step = "pair" | "goal" | "home";
+
+const KID_BADGE = <span className="chip">🧒 Kid mode</span>;
 
 export function KidFlow() {
   const navigate = useNavigate();
@@ -45,11 +47,11 @@ export function KidFlow() {
   }
 
   function handleTryDemo() {
-    handlePair(DEMO_URL);
+    handlePair(demoUrlFor("kid-solo"));
   }
 
   function handleReset() {
-    if (nwcUrl === DEMO_URL) resetDemo();
+    if (isDemoUrl(nwcUrl)) resetDemo(nwcUrl);
     clearState();
     navigate("/");
   }
@@ -57,7 +59,7 @@ export function KidFlow() {
   if (step === "pair") {
     return (
       <div className="wrap">
-        <Hud onBack={() => navigate("/")} />
+        <Hud onBack={() => navigate("/")} right={KID_BADGE} />
         <div className="screen">
           <div className="stack">
             <h2>Connect to a parent</h2>
@@ -121,7 +123,7 @@ function GoalSetup({
 
   return (
     <div className="wrap">
-      <Hud />
+      <Hud right={KID_BADGE} />
       <div className="screen">
         <div className="stack">
           <h2>What are you saving for?</h2>
@@ -195,7 +197,8 @@ function KidHome({
       <Hud
         right={
           <>
-            {nwcUrl === DEMO_URL && <span className="chip">DEMO</span>}
+            {KID_BADGE}
+            {isDemoUrl(nwcUrl) && <span className="chip">DEMO</span>}
             <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
               {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "…"}
             </span>
