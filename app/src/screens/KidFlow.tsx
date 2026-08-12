@@ -4,7 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { ActionCard } from "../components/ActionCard";
 import { QrScan } from "../components/QrScan";
-import { isValidNwcUrl, getBalanceSats, payInvoice, makeInvoice } from "../lib/nwc";
+import { isValidNwcUrl, getBalanceSats, payInvoice, makeInvoice, DEMO_URL } from "../lib/nwc";
+import { resetDemo } from "../lib/demo";
 import { loadState, saveState, clearState, type KidState } from "../lib/storage";
 
 type Step = "pair" | "goal" | "home";
@@ -22,17 +23,19 @@ export function KidFlow() {
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
 
-  async function handlePair() {
+  async function handlePair(urlOverride?: string) {
+    const url = urlOverride ?? nwcUrl;
     setError("");
-    if (!isValidNwcUrl(nwcUrl)) {
+    if (!isValidNwcUrl(url)) {
       setError("That doesn't look like a connection code. Ask a parent to show it again.");
       return;
     }
     setChecking(true);
     try {
-      await getBalanceSats(nwcUrl);
-      const state: KidState = { role: "kid", nickname: nickname || "friend", nwcUrl, target: null };
+      await getBalanceSats(url);
+      const state: KidState = { role: "kid", nickname: nickname || "friend", nwcUrl: url, target: null };
       saveState(state);
+      setNwcUrl(url);
       setStep("goal");
     } catch {
       setError("Couldn't connect. Ask a parent to check their wallet app.");
@@ -41,7 +44,12 @@ export function KidFlow() {
     }
   }
 
+  function handleTryDemo() {
+    handlePair(DEMO_URL);
+  }
+
   function handleReset() {
+    if (nwcUrl === DEMO_URL) resetDemo();
     clearState();
     navigate("/");
   }
@@ -72,8 +80,11 @@ export function KidFlow() {
               />
             </div>
             {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
-            <button className="btn" onClick={handlePair} disabled={!nwcUrl || checking}>
+            <button className="btn" onClick={() => handlePair()} disabled={!nwcUrl || checking}>
               {checking ? "Connecting…" : "Connect"}
+            </button>
+            <button className="btn ghost sm" onClick={handleTryDemo} disabled={checking}>
+              🧪 Try a demo (no wallet needed)
             </button>
           </div>
         </div>
@@ -183,9 +194,12 @@ function KidHome({
     <div className="wrap">
       <Hud
         right={
-          <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
-            {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "…"}
-          </span>
+          <>
+            {nwcUrl === DEMO_URL && <span className="chip">DEMO</span>}
+            <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
+              {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "…"}
+            </span>
+          </>
         }
       />
       <div className="screen">

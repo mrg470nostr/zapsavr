@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { PinEntry } from "../components/PinEntry";
-import { isValidNwcUrl, getBalanceSats, getBudget } from "../lib/nwc";
+import { isValidNwcUrl, getBalanceSats, getBudget, DEMO_URL } from "../lib/nwc";
+import { resetDemo } from "../lib/demo";
 import {
   loadState,
   saveState,
@@ -35,21 +36,27 @@ export function ParentFlow() {
   const [pinError, setPinError] = useState("");
   const [pinShake, setPinShake] = useState(false);
 
-  async function handleConnect() {
+  async function handleConnect(urlOverride?: string) {
+    const url = urlOverride ?? nwcUrl;
     setError("");
-    if (!isValidNwcUrl(nwcUrl)) {
+    if (!isValidNwcUrl(url)) {
       setError("That doesn't look like a wallet connection string. It should start with nostr+walletconnect://");
       return;
     }
     setChecking(true);
     try {
-      await getBalanceSats(nwcUrl);
+      await getBalanceSats(url);
+      if (urlOverride) setNwcUrl(urlOverride);
       setStep("pair");
     } catch {
       setError("Couldn't reach that wallet connection. Double check it's still active.");
     } finally {
       setChecking(false);
     }
+  }
+
+  function handleTryDemo() {
+    handleConnect(DEMO_URL);
   }
 
   function handleConfirmPairing() {
@@ -85,6 +92,7 @@ export function ParentFlow() {
   }
 
   function handleDisconnect() {
+    if (nwcUrl === DEMO_URL) resetDemo();
     clearState();
     navigate("/");
   }
@@ -115,8 +123,11 @@ export function ParentFlow() {
               budget, then paste the connection string it gives you here.
             </p>
             {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
-            <button className="btn" onClick={handleConnect} disabled={!nwcUrl || checking}>
+            <button className="btn" onClick={() => handleConnect()} disabled={!nwcUrl || checking}>
               {checking ? "Checking…" : "Connect"}
+            </button>
+            <button className="btn ghost sm" onClick={handleTryDemo} disabled={checking}>
+              🧪 Try a demo (no wallet needed)
             </button>
           </div>
         </div>
@@ -131,11 +142,17 @@ export function ParentFlow() {
         <div className="screen">
           <div className="stack">
             <h2>Connect to your kid</h2>
-            <p className="lede">Open ZapSavr on their phone and scan this to connect their jar.</p>
+            <p className="lede">
+              {nwcUrl === DEMO_URL
+                ? "This is a demo, so there's no real code to scan. On the kid's device, just tap \"Try a demo\" on its own pairing screen."
+                : "Open ZapSavr on their phone and scan this to connect their jar."}
+            </p>
           </div>
-          <div className="qr-wrap">
-            <QRCodeSVG value={nwcUrl} size={220} />
-          </div>
+          {nwcUrl !== DEMO_URL && (
+            <div className="qr-wrap">
+              <QRCodeSVG value={nwcUrl} size={220} />
+            </div>
+          )}
           <div className="card stack">
             <div className="field">
               <label>Kid's nickname (just for your view)</label>
@@ -244,9 +261,16 @@ function ParentHome({
 
   return (
     <div className="wrap">
-      <Hud right={<span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
-        {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "Checking…"}
-      </span>} />
+      <Hud
+        right={
+          <>
+            {nwcUrl === DEMO_URL && <span className="chip">DEMO</span>}
+            <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
+              {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "Checking…"}
+            </span>
+          </>
+        }
+      />
       <div className="screen">
         <h2>{kidNickname}'s jar</h2>
 
