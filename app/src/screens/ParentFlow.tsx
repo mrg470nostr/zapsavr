@@ -5,6 +5,7 @@ import { Hud } from "../components/Hud";
 import { PinEntry } from "../components/PinEntry";
 import { ReceivePanel } from "../components/ReceivePanel";
 import { SendPanel } from "../components/SendPanel";
+import { CopyField } from "../components/CopyField";
 import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, getBudget, listTransactions, type SimpleTx } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
 import {
@@ -184,8 +185,9 @@ export function ParentFlow() {
           </div>
           <div className="card stack">
             <div className="field">
-              <label>Connection string from your wallet</label>
+              <label htmlFor="connect-nwc-url">Connection string from your wallet</label>
               <textarea
+                id="connect-nwc-url"
                 placeholder="nostr+walletconnect://..."
                 value={nwcUrl}
                 onChange={(e) => setNwcUrl(e.target.value)}
@@ -230,14 +232,21 @@ export function ParentFlow() {
             </p>
           </div>
           {!isDemoUrl(nwcUrl) && (
-            <div className="qr-wrap">
-              <QRCodeSVG value={nwcUrl} size={220} />
-            </div>
+            <>
+              <div className="qr-wrap" role="img" aria-label="QR code for the wallet connection to scan">
+                <QRCodeSVG value={nwcUrl} size={220} />
+              </div>
+              <details>
+                <summary className="small">Can't scan? Use the code directly</summary>
+                <CopyField label="Connection string" value={nwcUrl} />
+              </details>
+            </>
           )}
           <div className="card stack">
             <div className="field">
-              <label>Kid's nickname</label>
+              <label htmlFor="pair-kid-nickname">Kid's nickname</label>
               <input
+                id="pair-kid-nickname"
                 type="text"
                 placeholder="e.g. Leo"
                 value={kidNickname}
@@ -315,8 +324,9 @@ export function ParentFlow() {
           </div>
           <div className="card stack">
             <div className="field">
-              <label>Connection string from your wallet</label>
+              <label htmlFor="own-nwc-url">Connection string from your wallet</label>
               <textarea
+                id="own-nwc-url"
                 placeholder="nostr+walletconnect://..."
                 value={nwcUrl}
                 onChange={(e) => setNwcUrl(e.target.value)}

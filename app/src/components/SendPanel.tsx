@@ -48,9 +48,10 @@ export function SendPanel({
     <div className="card stack">
       <h3>Pay</h3>
       <div className="field">
-        <label>Payment request</label>
+        <label htmlFor="send-invoice">Payment request</label>
         <QrScan onScan={setInvoice} />
         <textarea
+          id="send-invoice"
           placeholder="Paste or scan the payment request"
           value={invoice}
           onChange={(e) => setInvoice(e.target.value)}

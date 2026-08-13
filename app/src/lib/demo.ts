@@ -89,9 +89,11 @@ export async function demoPayInvoice(url: string, invoice: string) {
   await wait(500);
   const balance = readBalance(url);
   // Fake spend amount: a small, plausible "snack at a market stall" size,
-  // unless the pasted text itself hints at an amount.
+  // unless the pasted text itself hints at an amount. Deliberately NOT
+  // clamped to balance here — that would silently spend "whatever's left"
+  // instead of honestly failing, defeating the overdraft check below.
   const hinted = invoice.match(/(\d{2,6})/);
-  const amount = hinted ? Math.min(parseInt(hinted[1], 10), balance) : Math.min(1500, balance);
+  const amount = hinted ? parseInt(hinted[1], 10) : Math.min(1500, balance);
   if (amount <= 0 || amount > balance) {
     throw new Error("Not enough in the demo balance for that.");
   }

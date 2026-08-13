@@ -24,6 +24,7 @@ export function PinPad({
             className="card"
             style={{ padding: "18px 0", fontFamily: "var(--fd)", fontWeight: 800, fontSize: 20 }}
             onClick={() => (key === "back" ? onBackspace() : onKey(key))}
+            aria-label={key === "back" ? "Backspace" : `Digit ${key}`}
           >
             {key === "back" ? "⌫" : key}
           </button>

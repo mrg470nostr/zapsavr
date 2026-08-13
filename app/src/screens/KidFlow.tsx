@@ -140,13 +140,20 @@ export function KidFlow() {
           </div>
           <div className="card stack">
             <div className="field">
-              <label>Your name</label>
-              <input type="text" placeholder="e.g. Leo" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+              <label htmlFor="kid-nickname">Your name</label>
+              <input
+                id="kid-nickname"
+                type="text"
+                placeholder="e.g. Leo"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+              />
             </div>
             <div className="field">
-              <label>Scan or paste the code</label>
+              <label htmlFor="kid-pair-code">Scan or paste the code</label>
               <QrScan onScan={setNwcUrl} />
               <textarea
+                id="kid-pair-code"
                 placeholder="nostr+walletconnect://..."
                 value={nwcUrl}
                 onChange={(e) => setNwcUrl(e.target.value)}
@@ -252,8 +259,9 @@ function GoalForm({
         </div>
         <div className="card stack">
           <div className="field">
-            <label>What is it?</label>
+            <label htmlFor="goal-name">What is it?</label>
             <input
+              id="goal-name"
               type="text"
               placeholder="e.g. New skateboard"
               value={name}
@@ -261,8 +269,9 @@ function GoalForm({
             />
           </div>
           <div className="field">
-            <label>How many sats?</label>
+            <label htmlFor="goal-target-sats">How many sats?</label>
             <input
+              id="goal-target-sats"
               type="number"
               placeholder="e.g. 50000"
               value={goal}
@@ -434,6 +443,7 @@ function GoalDetail({
           <div className="row">
             <input
               type="text"
+              aria-label="Goal name"
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
               style={{ flex: 1 }}
@@ -449,8 +459,10 @@ function GoalDetail({
             </button>
           </div>
         ) : (
-          <h2 onClick={() => setEditingName(true)} style={{ cursor: "pointer" }}>
-            {goal.name} ✏️
+          <h2>
+            <button type="button" onClick={() => setEditingName(true)} aria-label={`Edit name, currently ${goal.name}`}>
+              {goal.name} ✏️
+            </button>
           </h2>
         )}
 
@@ -460,6 +472,7 @@ function GoalDetail({
             <div className="row">
               <input
                 type="number"
+                aria-label="Goal target in sats"
                 value={targetDraft}
                 onChange={(e) => setTargetDraft(e.target.value)}
                 style={{ flex: 1 }}
@@ -476,9 +489,14 @@ function GoalDetail({
               </button>
             </div>
           ) : (
-            <span className="jar-goal" onClick={() => setEditingTarget(true)} style={{ cursor: "pointer" }}>
+            <button
+              type="button"
+              className="jar-goal"
+              onClick={() => setEditingTarget(true)}
+              aria-label={`Edit target, currently ${goal.goalSats} sats`}
+            >
               of {goal.goalSats.toLocaleString()} sats ✏️
-            </span>
+            </button>
           )}
           <div className="track">
             <i style={{ width: `${progress}%` }} />
@@ -499,12 +517,13 @@ function GoalDetail({
         )}
 
         <div className="card stack">
-          <label>Add from your wallet</label>
+          <label htmlFor="goal-add-amount">Add from your wallet</label>
           <p className="small">
             {unallocated !== null ? `${unallocated.toLocaleString()} sats not in a goal yet` : "Checking your wallet…"}
           </p>
           <div className="row">
             <input
+              id="goal-add-amount"
               type="number"
               placeholder="e.g. 1000"
               value={addAmount}
@@ -525,9 +544,10 @@ function GoalDetail({
         </div>
 
         <div className="card stack">
-          <label>Move back to your wallet</label>
+          <label htmlFor="goal-take-amount">Move back to your wallet</label>
           <div className="row">
             <input
+              id="goal-take-amount"
               type="number"
               placeholder="e.g. 500"
               value={takeAmount}

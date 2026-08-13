@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { makeInvoice } from "../lib/nwc";
+import { CopyField } from "./CopyField";
 
 export function ReceivePanel({
   nwcUrl,
@@ -39,15 +40,25 @@ export function ReceivePanel({
       {invoice ? (
         <>
           <p className="small">Show this to whoever's sending sats.</p>
-          <div className="qr-wrap">
+          <div className="qr-wrap" role="img" aria-label="QR code for the payment request">
             <QRCodeSVG value={invoice} size={180} />
           </div>
+          <details>
+            <summary className="small">Can't scan? Use the request directly</summary>
+            <CopyField label="Payment request" value={invoice} />
+          </details>
         </>
       ) : (
         <>
           <div className="field">
-            <label>How many sats?</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 2000" />
+            <label htmlFor="receive-amount">How many sats?</label>
+            <input
+              id="receive-amount"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="e.g. 2000"
+            />
           </div>
           {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
           <button className="btn" onClick={handleCreate} disabled={!amount || loading}>
