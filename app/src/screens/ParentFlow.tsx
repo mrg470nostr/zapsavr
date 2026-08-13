@@ -579,6 +579,11 @@ function OwnWalletDetail({
           )}
         </div>
 
+        <details>
+          <summary className="small">For the curious: the technical details</summary>
+          <CopyField label="NWC connection string" value={wallet.nwcUrl} />
+        </details>
+
         <div className="spacer" />
 
         {confirmingDisconnect ? (
@@ -758,6 +763,11 @@ function KidDetail({
             ))
           )}
         </div>
+
+        <details>
+          <summary className="small">For the curious: the technical details</summary>
+          <CopyField label="NWC connection string" value={kid.nwcUrl} />
+        </details>
 
         <div className="spacer" />
 

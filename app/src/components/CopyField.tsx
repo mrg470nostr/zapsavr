@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 // A text alternative to a QR code: visible, selectable, and copyable, for
 // anyone who can't scan (no camera, screen reader, printed instructions).
 export function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
+  const id = useId();
 
   async function handleCopy() {
     try {
@@ -18,8 +19,8 @@ export function CopyField({ label, value }: { label: string; value: string }) {
 
   return (
     <div className="field">
-      <label htmlFor="copy-field-value">{label}</label>
-      <textarea id="copy-field-value" readOnly value={value} rows={3} onFocus={(e) => e.target.select()} />
+      <label htmlFor={id}>{label}</label>
+      <textarea id={id} readOnly value={value} rows={3} onFocus={(e) => e.target.select()} />
       <button type="button" className="btn ghost sm" style={{ marginTop: 8 }} onClick={handleCopy}>
         {copied ? "Copied!" : "Copy"}
       </button>

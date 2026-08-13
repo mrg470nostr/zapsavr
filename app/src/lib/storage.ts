@@ -15,6 +15,10 @@ export type KidState = {
   nickname: string;
   nwcUrl: string;
   targets: SavingTarget[];
+  // A kid-set-for-themselves nudge, not a parent-enforced limit — there's no
+  // channel today for a parent's device to push a setting to the kid's
+  // device. See docs/ARCHITECTURE.md "Pause before a big purchase".
+  bigPurchasePauseSats?: number;
 };
 
 export type FamilyKid = {

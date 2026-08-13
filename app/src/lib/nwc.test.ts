@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { isValidNwcUrl, decodeInvoiceAmountSats, payInvoice, getBalanceSats, listTransactions, demoUrlFor } from "./nwc";
+import {
+  isValidNwcUrl,
+  decodeInvoiceAmountSats,
+  previewInvoiceAmountSats,
+  payInvoice,
+  getBalanceSats,
+  listTransactions,
+  demoUrlFor,
+} from "./nwc";
 
 const mockParseWalletConnectUrl = vi.fn();
 const mockClose = vi.fn();
@@ -65,6 +73,24 @@ describe("decodeInvoiceAmountSats", () => {
       throw new Error("not bech32");
     });
     expect(decodeInvoiceAmountSats("not-an-invoice")).toBeNull();
+  });
+});
+
+describe("previewInvoiceAmountSats — used for the pre-payment big-purchase pause", () => {
+  it("decodes real invoices the same way decodeInvoiceAmountSats does", () => {
+    mockDecode.mockReturnValue({ sections: [{ name: "amount", value: "7000000" }] });
+    expect(previewInvoiceAmountSats("nostr+walletconnect://x", "lnbc...")).toBe(7000);
+  });
+
+  it("reads the digit hint out of a demo invoice instead of trying real BOLT11 decoding", () => {
+    const url = demoUrlFor(`preview-${Math.random()}`);
+    expect(previewInvoiceAmountSats(url, "lnbc-demo-3000-abc123")).toBe(3000);
+    expect(mockDecode).not.toHaveBeenCalled();
+  });
+
+  it("returns null for a demo invoice with no recognizable amount", () => {
+    const url = demoUrlFor(`preview-${Math.random()}`);
+    expect(previewInvoiceAmountSats(url, "no-digits-here")).toBeNull();
   });
 });
 

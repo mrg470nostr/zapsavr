@@ -20,7 +20,9 @@ Put Phase 1 in the hands of a handful of kids in Santo Antonio do Pinhal. Watch 
 
 ## Phase 3 — Round out the loop
 
-Once Phase 1 survives contact with real kids, fill in what got deliberately deferred: per-transaction limits as a second guardrail beyond the weekly budget, and a decision on which Cashu mint(s) the community trusts long-term, or whether Ark/Arkade has matured enough by then to use instead.
+Once Phase 1 survives contact with real kids, fill in what got deliberately deferred: a decision on which Cashu mint(s) the community trusts long-term, or whether Ark/Arkade has matured enough by then to use instead.
+
+**Per-transaction limits landed early too (2026-08-13), scoped honestly.** See the correction in `docs/PRD.md` — it shipped as a kid-set "pause before a big purchase" nudge, not a parent-enforced cap, since there's no real channel today for a parent's device to push a setting to the kid's device. A true parent-enforced version is still open; it needs that sync mechanism designed first.
 
 **The friendlier parent view, multi-kid support, transaction history, the parent's own in-app wallet, and multiple named saving spaces all landed early** (2026-08-12 through 2026-08-13), ahead of Phase 2 real-kid testing, because a family actually trying this with several kids and several goals needed it immediately to make sense of the app at all. See `docs/ARCHITECTURE.md`'s "Family model" and "Saving spaces" sections for the shape. Saving spaces work exactly as originally planned here: free, instant, ledger-level buckets over one real balance, not separate accounts — kids can now add more than one goal per jar.
 

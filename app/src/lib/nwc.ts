@@ -71,6 +71,19 @@ export function decodeInvoiceAmountSats(invoice: string): number | null {
   }
 }
 
+// Previews how much an invoice will cost *before* paying it — used for the
+// kid's own "pause before a big purchase" nudge (see docs/ROADMAP.md), which
+// needs to know the amount ahead of the actual payInvoice call. Demo
+// invoices aren't real BOLT11, so they use the same digit-hint parsing
+// demoPayInvoice itself will use when actually charged.
+export function previewInvoiceAmountSats(nwcUrl: string, invoice: string): number | null {
+  if (isDemoUrl(nwcUrl)) {
+    const hinted = invoice.match(/(\d{2,6})/);
+    return hinted ? parseInt(hinted[1], 10) : null;
+  }
+  return decodeInvoiceAmountSats(invoice);
+}
+
 export async function payInvoice(nwcUrl: string, invoice: string) {
   if (isDemoUrl(nwcUrl)) {
     const result = await demoPayInvoice(nwcUrl, invoice);

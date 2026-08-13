@@ -24,6 +24,7 @@ export function KidFlow() {
   const [nwcUrl, setNwcUrl] = useState(kidExisting?.nwcUrl ?? "");
   const [nickname, setNickname] = useState(kidExisting?.nickname ?? "");
   const [targets, setTargets] = useState<SavingTarget[]>(kidExisting?.targets ?? []);
+  const [pauseThreshold, setPauseThreshold] = useState<number | undefined>(kidExisting?.bigPurchasePauseSats);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
@@ -32,8 +33,13 @@ export function KidFlow() {
 
   // Persists to storage and updates state in one place, so every mutation re-renders immediately.
   function persistTargets(nextTargets: SavingTarget[]) {
-    saveState({ role: "kid", nickname, nwcUrl, targets: nextTargets });
+    saveState({ role: "kid", nickname, nwcUrl, targets: nextTargets, bigPurchasePauseSats: pauseThreshold });
     setTargets(nextTargets);
+  }
+
+  function persistPauseThreshold(next: number | undefined) {
+    saveState({ role: "kid", nickname, nwcUrl, targets, bigPurchasePauseSats: next });
+    setPauseThreshold(next);
   }
 
   async function refreshBalance() {
@@ -205,6 +211,7 @@ export function KidFlow() {
             handlePayFromGoal(goal.id, amountSats);
             refreshBalance();
           }}
+          confirmAboveSats={pauseThreshold}
         />
       );
     }
@@ -218,6 +225,8 @@ export function KidFlow() {
       balance={balance}
       balanceStatus={balanceStatus}
       unallocated={unallocated}
+      pauseThreshold={pauseThreshold}
+      onSetPauseThreshold={persistPauseThreshold}
       onRefreshBalance={refreshBalance}
       onReset={handleReset}
       onNewGoal={() => setStep("goal-new")}
@@ -299,6 +308,8 @@ function KidHome({
   balance,
   balanceStatus,
   unallocated,
+  pauseThreshold,
+  onSetPauseThreshold,
   onRefreshBalance,
   onReset,
   onNewGoal,
@@ -310,12 +321,15 @@ function KidHome({
   balance: number | null;
   balanceStatus: "loading" | "ok" | "error";
   unallocated: number | null;
+  pauseThreshold: number | undefined;
+  onSetPauseThreshold: (value: number | undefined) => void;
   onRefreshBalance: () => void;
   onReset: () => void;
   onNewGoal: () => void;
   onOpenGoal: (id: string) => void;
 }) {
-  const [mode, setMode] = useState<"none" | "ask" | "pay" | "offline">("none");
+  const [mode, setMode] = useState<"none" | "ask" | "pay" | "offline" | "settings">("none");
+  const [pauseDraft, setPauseDraft] = useState(pauseThreshold ? String(pauseThreshold) : "");
 
   return (
     <div className="wrap">
@@ -382,7 +396,59 @@ function KidHome({
         </div>
 
         {mode === "ask" && <ReceivePanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); onRefreshBalance(); }} />}
-        {mode === "pay" && <SendPanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); onRefreshBalance(); }} />}
+        {mode === "pay" && (
+          <SendPanel
+            nwcUrl={nwcUrl}
+            onClose={() => { setMode("none"); onRefreshBalance(); }}
+            confirmAboveSats={pauseThreshold}
+          />
+        )}
+        {mode === "settings" && (
+          <div className="card stack">
+            <h3>Pause before a big purchase</h3>
+            <p className="small">
+              A reminder just for you — before paying more than this, ZapSavr will ask "are you sure?" This
+              doesn't lock anything, it's here to help you pause and think, the way saving up for something
+              teaches patience.
+            </p>
+            <div className="field">
+              <label htmlFor="pause-threshold">Ask me before paying more than</label>
+              <input
+                id="pause-threshold"
+                type="number"
+                placeholder="e.g. 5000"
+                value={pauseDraft}
+                onChange={(e) => setPauseDraft(e.target.value)}
+              />
+            </div>
+            <div className="row">
+              <button
+                className="btn sm"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  const n = parseInt(pauseDraft, 10);
+                  onSetPauseThreshold(n > 0 ? n : undefined);
+                  setMode("none");
+                }}
+              >
+                Save
+              </button>
+              {pauseThreshold !== undefined && (
+                <button
+                  className="btn ghost sm"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    onSetPauseThreshold(undefined);
+                    setPauseDraft("");
+                    setMode("none");
+                  }}
+                >
+                  Turn off
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {mode === "offline" && (
           <div className="stub">
             Offline, phone-to-phone payments are coming in a later version, once the community picks which Cashu
@@ -396,6 +462,11 @@ function KidHome({
         )}
 
         <div className="spacer" />
+        <button className="btn ghost sm" onClick={() => setMode("settings")}>
+          {pauseThreshold
+            ? `⚙️ Pause before paying over ${pauseThreshold.toLocaleString()} sats`
+            : "⚙️ Pause before a big purchase"}
+        </button>
         <button className="btn ghost sm" onClick={onReset}>
           Disconnect this device
         </button>
@@ -415,6 +486,7 @@ function GoalDetail({
   onChangeTarget,
   onDelete,
   onPaid,
+  confirmAboveSats,
 }: {
   nwcUrl: string;
   goal: SavingTarget;
@@ -426,6 +498,7 @@ function GoalDetail({
   onChangeTarget: (goalSats: number) => void;
   onDelete: () => void;
   onPaid: (amountSats: number | null) => void;
+  confirmAboveSats?: number;
 }) {
   const [addAmount, setAddAmount] = useState("");
   const [takeAmount, setTakeAmount] = useState("");
@@ -523,6 +596,7 @@ function GoalDetail({
             failMessage="That payment didn't go through — check the request or your wallet."
             onClose={() => setShowPay(false)}
             onPaid={(amountSats) => onPaid(amountSats)}
+            confirmAboveSats={confirmAboveSats}
           />
         )}
 
