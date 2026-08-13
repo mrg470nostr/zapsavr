@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { Logo } from "../components/Logo";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 export function RoleSelect() {
   const navigate = useNavigate();
@@ -6,8 +8,12 @@ export function RoleSelect() {
   return (
     <div className="wrap">
       <div className="screen center">
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <ThemeToggle />
+        </div>
         <div className="spacer" />
         <div className="stack" style={{ alignItems: "center" }}>
+          <Logo size={64} />
           <span className="eyebrow">Bitcoin Amantikir</span>
           <h1>
             Welcome to <span className="gold">ZapSavr</span>

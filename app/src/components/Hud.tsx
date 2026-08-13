@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Logo } from "./Logo";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Hud({
   right,
@@ -14,9 +16,11 @@ export function Hud({
           ←
         </button>
       )}
+      <Logo size={22} />
       <span className="brand">ZAPSAVR</span>
       <div className="sp" />
       {right}
+      <ThemeToggle />
     </div>
   );
 }

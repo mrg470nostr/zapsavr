@@ -12,6 +12,21 @@
     <meta name="apple-mobile-web-app-title" content="ZapSavr" />
     <title>ZapSavr</title>
     <script>
+      // Applied before first paint so switching themes doesn't flash the
+      // wrong one for a frame. Explicit choice wins; otherwise follow the
+      // OS preference (the CSS media query below handles that case too).
+      (function () {
+        try {
+          var stored = localStorage.getItem('zapsavr.theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', stored);
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', stored === 'light' ? '#f7f1e3' : '#0c1216');
+          }
+        } catch {}
+      })();
+    </script>
+    <script>
       // Decode the path 404.html redirected here (see public/404.html).
       (function () {
         var params = new URLSearchParams(window.location.search);
