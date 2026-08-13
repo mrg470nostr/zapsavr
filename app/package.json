@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@getalby/sdk": "^8.0.3",
+    "light-bolt11-decoder": "^3.2.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

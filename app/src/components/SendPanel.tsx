@@ -6,10 +6,12 @@ export function SendPanel({
   nwcUrl,
   failMessage = "That payment didn't go through — check the request or your allowance.",
   onClose,
+  onPaid,
 }: {
   nwcUrl: string;
   failMessage?: string;
   onClose: () => void;
+  onPaid?: (amountSats: number | null) => void;
 }) {
   const [invoice, setInvoice] = useState("");
   const [error, setError] = useState("");
@@ -20,8 +22,9 @@ export function SendPanel({
     setLoading(true);
     setError("");
     try {
-      await payInvoice(nwcUrl, invoice);
+      const result = await payInvoice(nwcUrl, invoice);
       setSuccess(true);
+      onPaid?.(result.amountSats);
     } catch {
       setError(failMessage);
     } finally {

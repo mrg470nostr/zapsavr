@@ -1,4 +1,5 @@
 import { NWCClient } from "@getalby/sdk";
+import { decode as decodeBolt11 } from "light-bolt11-decoder";
 import {
   isDemoUrl,
   demoGetBalanceSats,
@@ -56,11 +57,30 @@ export async function getBudget(nwcUrl: string) {
   }
 }
 
+// Reads the amount straight out of the invoice itself (BOLT11 encodes it),
+// rather than trusting whatever the payer typed — null for "any amount"
+// invoices, which don't encode one.
+export function decodeInvoiceAmountSats(invoice: string): number | null {
+  try {
+    const { sections } = decodeBolt11(invoice.trim());
+    const amountSection = sections.find((s) => s.name === "amount") as { value?: string } | undefined;
+    if (!amountSection?.value) return null;
+    return Math.floor(parseInt(amountSection.value, 10) / 1000);
+  } catch {
+    return null;
+  }
+}
+
 export async function payInvoice(nwcUrl: string, invoice: string) {
-  if (isDemoUrl(nwcUrl)) return demoPayInvoice(nwcUrl, invoice);
+  if (isDemoUrl(nwcUrl)) {
+    const result = await demoPayInvoice(nwcUrl, invoice);
+    return { preimage: result.preimage, fees_paid: result.fees_paid, amountSats: result.amount as number | null };
+  }
+  const amountSats = decodeInvoiceAmountSats(invoice);
   const client = connect(nwcUrl);
   try {
-    return await client.payInvoice({ invoice: invoice.trim() });
+    const result = await client.payInvoice({ invoice: invoice.trim() });
+    return { preimage: result.preimage, fees_paid: result.fees_paid, amountSats };
   } finally {
     client.close();
   }

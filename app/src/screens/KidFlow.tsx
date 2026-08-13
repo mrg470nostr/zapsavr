@@ -119,6 +119,16 @@ export function KidFlow() {
     setStep("home");
   }
 
+  // amountSats is null for "any amount" invoices that don't encode one — nothing to deduct then.
+  function handlePayFromGoal(goalId: string, amountSats: number | null) {
+    if (amountSats === null) return;
+    persistTargets(
+      targets.map((t) =>
+        t.id === goalId ? { ...t, allocatedSats: Math.max(0, t.allocatedSats - amountSats) } : t
+      )
+    );
+  }
+
   if (step === "pair") {
     return (
       <div className="wrap">
@@ -172,6 +182,7 @@ export function KidFlow() {
     if (goal) {
       return (
         <GoalDetail
+          nwcUrl={nwcUrl}
           goal={goal}
           unallocated={unallocated}
           onBack={() => {
@@ -183,6 +194,10 @@ export function KidFlow() {
           onRename={(name) => handleRenameGoal(goal.id, name)}
           onChangeTarget={(sats) => handleChangeGoalTarget(goal.id, sats)}
           onDelete={() => handleDeleteGoal(goal.id)}
+          onPaid={(amountSats) => {
+            handlePayFromGoal(goal.id, amountSats);
+            refreshBalance();
+          }}
         />
       );
     }
@@ -378,6 +393,7 @@ function KidHome({
 }
 
 function GoalDetail({
+  nwcUrl,
   goal,
   unallocated,
   onBack,
@@ -386,7 +402,9 @@ function GoalDetail({
   onRename,
   onChangeTarget,
   onDelete,
+  onPaid,
 }: {
+  nwcUrl: string;
   goal: SavingTarget;
   unallocated: number | null;
   onBack: () => void;
@@ -395,6 +413,7 @@ function GoalDetail({
   onRename: (name: string) => void;
   onChangeTarget: (goalSats: number) => void;
   onDelete: () => void;
+  onPaid: (amountSats: number | null) => void;
 }) {
   const [addAmount, setAddAmount] = useState("");
   const [takeAmount, setTakeAmount] = useState("");
@@ -403,6 +422,7 @@ function GoalDetail({
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetDraft, setTargetDraft] = useState(String(goal.goalSats));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showPay, setShowPay] = useState(false);
 
   const progress = Math.min(100, (goal.allocatedSats / goal.goalSats) * 100);
 
@@ -466,6 +486,18 @@ function GoalDetail({
           {progress >= 100 && <span className="chip ok">Goal reached! 🎉</span>}
         </div>
 
+        <button className="btn" onClick={() => setShowPay((v) => !v)}>
+          ⚡ Pay from this goal
+        </button>
+        {showPay && (
+          <SendPanel
+            nwcUrl={nwcUrl}
+            failMessage="That payment didn't go through — check the request or your wallet."
+            onClose={() => setShowPay(false)}
+            onPaid={(amountSats) => onPaid(amountSats)}
+          />
+        )}
+
         <div className="card stack">
           <label>Add from your wallet</label>
           <p className="small">
@@ -516,9 +548,9 @@ function GoalDetail({
         </div>
 
         <p className="small">
-          Goals are just labels over your one real balance — moving sats between them is instant and free, but
-          nothing stops you from spending sats that were set aside for a goal. It's here to help you plan, not to
-          lock money away.
+          Goals are just labels over your one real balance — moving sats between them is instant and free. Paying
+          from this screen keeps the number here accurate, but nothing actually locks the sats away: spending them
+          from the main "Pay" button on your wallet won't update this goal automatically.
         </p>
 
         <div className="spacer" />
