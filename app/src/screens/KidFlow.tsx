@@ -7,9 +7,9 @@ import { ReceivePanel } from "../components/ReceivePanel";
 import { SendPanel } from "../components/SendPanel";
 import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
-import { loadState, saveState, clearState, type KidState } from "../lib/storage";
+import { loadState, saveState, clearState, newId, type KidState, type SavingTarget } from "../lib/storage";
 
-type Step = "pair" | "goal" | "home";
+type Step = "pair" | "goal-new" | "home" | "goal-detail";
 
 const KID_BADGE = <span className="chip">🧒 Kid mode</span>;
 
@@ -19,12 +19,38 @@ export function KidFlow() {
   const kidExisting = existing?.role === "kid" ? existing : null;
 
   const [step, setStep] = useState<Step>(
-    kidExisting ? (kidExisting.target ? "home" : "goal") : "pair"
+    kidExisting ? (kidExisting.targets.length > 0 ? "home" : "goal-new") : "pair"
   );
   const [nwcUrl, setNwcUrl] = useState(kidExisting?.nwcUrl ?? "");
   const [nickname, setNickname] = useState(kidExisting?.nickname ?? "");
+  const [targets, setTargets] = useState<SavingTarget[]>(kidExisting?.targets ?? []);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [balanceStatus, setBalanceStatus] = useState<"loading" | "ok" | "error">("loading");
+
+  // Persists to storage and updates state in one place, so every mutation re-renders immediately.
+  function persistTargets(nextTargets: SavingTarget[]) {
+    saveState({ role: "kid", nickname, nwcUrl, targets: nextTargets });
+    setTargets(nextTargets);
+  }
+
+  async function refreshBalance() {
+    setBalanceStatus((s) => (s === "ok" ? s : "loading"));
+    try {
+      const sats = await getBalanceSats(nwcUrl);
+      setBalance(sats);
+      setBalanceStatus("ok");
+    } catch {
+      setBalanceStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    if (nwcUrl && (step === "home" || step === "goal-detail")) refreshBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nwcUrl, step]);
 
   async function handlePair(urlOverride?: string) {
     const url = urlOverride ?? nwcUrl;
@@ -36,10 +62,10 @@ export function KidFlow() {
     setChecking(true);
     try {
       await getBalanceSats(url);
-      const state: KidState = { role: "kid", nickname: nickname || "friend", nwcUrl: url, target: null };
+      const state: KidState = { role: "kid", nickname: nickname || "friend", nwcUrl: url, targets: [] };
       saveState(state);
       setNwcUrl(url);
-      setStep("goal");
+      setStep("goal-new");
     } catch {
       setError("Couldn't connect. Ask a parent to check their wallet app.");
     } finally {
@@ -55,6 +81,42 @@ export function KidFlow() {
     if (isDemoUrl(nwcUrl)) resetDemo(nwcUrl);
     clearState();
     navigate("/");
+  }
+
+  function handleCreateGoal(name: string, goalSats: number) {
+    const target: SavingTarget = { id: newId(), name, goalSats, allocatedSats: 0 };
+    persistTargets([...targets, target]);
+    setStep("home");
+  }
+
+  const totalAllocated = targets.reduce((sum, t) => sum + t.allocatedSats, 0);
+  const unallocated = balance !== null ? Math.max(0, balance - totalAllocated) : null;
+
+  function handleAllocate(goalId: string, amount: number) {
+    if (amount <= 0 || unallocated === null || amount > unallocated) return;
+    persistTargets(targets.map((t) => (t.id === goalId ? { ...t, allocatedSats: t.allocatedSats + amount } : t)));
+  }
+
+  function handleDeallocate(goalId: string, amount: number) {
+    const target = targets.find((t) => t.id === goalId);
+    if (!target || amount <= 0 || amount > target.allocatedSats) return;
+    persistTargets(targets.map((t) => (t.id === goalId ? { ...t, allocatedSats: t.allocatedSats - amount } : t)));
+  }
+
+  function handleRenameGoal(goalId: string, name: string) {
+    if (!name.trim()) return;
+    persistTargets(targets.map((t) => (t.id === goalId ? { ...t, name: name.trim() } : t)));
+  }
+
+  function handleChangeGoalTarget(goalId: string, goalSats: number) {
+    if (goalSats <= 0) return;
+    persistTargets(targets.map((t) => (t.id === goalId ? { ...t, goalSats } : t)));
+  }
+
+  function handleDeleteGoal(goalId: string) {
+    persistTargets(targets.filter((t) => t.id !== goalId));
+    setSelectedGoalId(null);
+    setStep("home");
   }
 
   if (step === "pair") {
@@ -95,21 +157,64 @@ export function KidFlow() {
     );
   }
 
-  if (step === "goal") {
-    return <GoalSetup nwcUrl={nwcUrl} nickname={nickname} onDone={() => setStep("home")} />;
+  if (step === "goal-new") {
+    return (
+      <GoalForm
+        isFirst={targets.length === 0}
+        onCancel={targets.length > 0 ? () => setStep("home") : undefined}
+        onSave={handleCreateGoal}
+      />
+    );
   }
 
-  return <KidHome nwcUrl={nwcUrl} nickname={nickname} onReset={handleReset} onEditGoal={() => setStep("goal")} />;
+  if (step === "goal-detail" && selectedGoalId) {
+    const goal = targets.find((t) => t.id === selectedGoalId);
+    if (goal) {
+      return (
+        <GoalDetail
+          goal={goal}
+          unallocated={unallocated}
+          onBack={() => {
+            setSelectedGoalId(null);
+            setStep("home");
+          }}
+          onAllocate={(amount) => handleAllocate(goal.id, amount)}
+          onDeallocate={(amount) => handleDeallocate(goal.id, amount)}
+          onRename={(name) => handleRenameGoal(goal.id, name)}
+          onChangeTarget={(sats) => handleChangeGoalTarget(goal.id, sats)}
+          onDelete={() => handleDeleteGoal(goal.id)}
+        />
+      );
+    }
+  }
+
+  return (
+    <KidHome
+      nwcUrl={nwcUrl}
+      nickname={nickname}
+      targets={targets}
+      balance={balance}
+      balanceStatus={balanceStatus}
+      unallocated={unallocated}
+      onRefreshBalance={refreshBalance}
+      onReset={handleReset}
+      onNewGoal={() => setStep("goal-new")}
+      onOpenGoal={(id) => {
+        setSelectedGoalId(id);
+        setStep("goal-detail");
+      }}
+    />
+  );
 }
 
-function GoalSetup({
-  nwcUrl,
-  nickname,
-  onDone,
+function GoalForm({
+  isFirst,
+  onCancel,
+  onSave,
 }: {
-  nwcUrl: string;
-  nickname: string;
-  onDone: () => void;
+  isFirst: boolean;
+  onCancel?: () => void;
+  onSave: (name: string, goalSats: number) => void;
 }) {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -117,18 +222,18 @@ function GoalSetup({
   function handleSave() {
     const goalSats = parseInt(goal, 10);
     if (!name || !goalSats || goalSats <= 0) return;
-    const state: KidState = { role: "kid", nickname, nwcUrl, target: { name, goalSats } };
-    saveState(state);
-    onDone();
+    onSave(name, goalSats);
   }
 
   return (
     <div className="wrap">
-      <Hud right={KID_BADGE} />
+      <Hud onBack={onCancel} right={KID_BADGE} />
       <div className="screen">
         <div className="stack">
-          <h2>What are you saving for?</h2>
-          <p className="lede">Pick something you want — this is the whole point.</p>
+          <h2>{isFirst ? "What are you saving for?" : "Add another goal"}</h2>
+          <p className="lede">
+            {isFirst ? "Pick something you want — this is the whole point." : "Give it a name and a target."}
+          </p>
         </div>
         <div className="card stack">
           <div className="field">
@@ -150,8 +255,13 @@ function GoalSetup({
             />
           </div>
           <button className="btn" onClick={handleSave} disabled={!name || !goal}>
-            Start saving
+            {isFirst ? "Start saving" : "Add goal"}
           </button>
+          {onCancel && (
+            <button className="btn ghost sm" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -161,37 +271,27 @@ function GoalSetup({
 function KidHome({
   nwcUrl,
   nickname,
+  targets,
+  balance,
+  balanceStatus,
+  unallocated,
+  onRefreshBalance,
   onReset,
-  onEditGoal,
+  onNewGoal,
+  onOpenGoal,
 }: {
   nwcUrl: string;
   nickname: string;
+  targets: SavingTarget[];
+  balance: number | null;
+  balanceStatus: "loading" | "ok" | "error";
+  unallocated: number | null;
+  onRefreshBalance: () => void;
   onReset: () => void;
-  onEditGoal: () => void;
+  onNewGoal: () => void;
+  onOpenGoal: (id: string) => void;
 }) {
-  const state = loadState();
-  const target = state?.role === "kid" ? state.target : null;
-
-  const [balance, setBalance] = useState<number | null>(null);
-  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [mode, setMode] = useState<"none" | "ask" | "pay" | "offline">("none");
-
-  async function refreshBalance() {
-    try {
-      const sats = await getBalanceSats(nwcUrl);
-      setBalance(sats);
-      setStatus("ok");
-    } catch {
-      setStatus("error");
-    }
-  }
-
-  useEffect(() => {
-    refreshBalance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nwcUrl]);
-
-  const progress = target && balance !== null ? Math.min(100, (balance / target.goalSats) * 100) : 0;
 
   return (
     <div className="wrap">
@@ -200,8 +300,8 @@ function KidHome({
           <>
             {KID_BADGE}
             {isDemoUrl(nwcUrl) && <span className="chip">DEMO</span>}
-            <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
-              {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "…"}
+            <span className={`chip ${balanceStatus === "ok" ? "ok" : balanceStatus === "error" ? "err" : ""}`}>
+              {balanceStatus === "ok" ? "Connected" : balanceStatus === "error" ? "Unreachable" : "…"}
             </span>
           </>
         }
@@ -209,25 +309,42 @@ function KidHome({
       <div className="screen">
         <h2>Hi, {nickname}! 👋</h2>
 
-        {target ? (
-          <div className="card stack center">
-            <span className="small">SAVING FOR</span>
-            <b style={{ fontFamily: "var(--fd)", fontSize: 18 }}>{target.name}</b>
-            {balance === null ? (
-              <p className="small">{status === "error" ? "Can't check right now" : "Loading…"}</p>
-            ) : (
-              <span className="jar-amount gold">{balance.toLocaleString()} sats</span>
-            )}
-            <span className="jar-goal">of {target.goalSats.toLocaleString()} sats</span>
-            <div className="track">
-              <i style={{ width: `${progress}%` }} />
-            </div>
-            {progress >= 100 && <span className="chip ok">Goal reached! 🎉</span>}
-            <button className="btn ghost sm" onClick={onEditGoal}>
-              Change goal
-            </button>
-          </div>
-        ) : null}
+        <div className="card stack center">
+          <span className="small">YOUR WALLET</span>
+          {balance === null ? (
+            <p className="small">{balanceStatus === "error" ? "Can't check right now" : "Loading…"}</p>
+          ) : (
+            <span className="jar-amount gold">{balance.toLocaleString()} sats</span>
+          )}
+          {unallocated !== null && unallocated > 0 && (
+            <span className="small">{unallocated.toLocaleString()} sats not in a goal yet</span>
+          )}
+        </div>
+
+        <div className="stack">
+          {targets.map((goal) => {
+            const progress = Math.min(100, (goal.allocatedSats / goal.goalSats) * 100);
+            return (
+              <button key={goal.id} className="opt" onClick={() => onOpenGoal(goal.id)}>
+                <span className="ico">🎯</span>
+                <span className="t" style={{ flex: 1 }}>
+                  <b>{goal.name}</b>
+                  <span>
+                    {goal.allocatedSats.toLocaleString()} / {goal.goalSats.toLocaleString()} sats
+                  </span>
+                  <div className="track" style={{ marginTop: 6 }}>
+                    <i style={{ width: `${progress}%` }} />
+                  </div>
+                </span>
+                {progress >= 100 && <span className="chip ok">🎉</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <button className="btn ghost sm" onClick={onNewGoal}>
+          + New goal
+        </button>
 
         <div className="row">
           <ActionCard label="Ask for sats" icon="📥" onClick={() => setMode("ask")} />
@@ -237,8 +354,8 @@ function KidHome({
           <ActionCard label="Offline payment" icon="📶" onClick={() => setMode("offline")} />
         </div>
 
-        {mode === "ask" && <ReceivePanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
-        {mode === "pay" && <SendPanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
+        {mode === "ask" && <ReceivePanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); onRefreshBalance(); }} />}
+        {mode === "pay" && <SendPanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); onRefreshBalance(); }} />}
         {mode === "offline" && (
           <div className="stub">
             Offline, phone-to-phone payments are coming in a later version, once the community picks which Cashu
@@ -255,6 +372,176 @@ function KidHome({
         <button className="btn ghost sm" onClick={onReset}>
           Disconnect this device
         </button>
+      </div>
+    </div>
+  );
+}
+
+function GoalDetail({
+  goal,
+  unallocated,
+  onBack,
+  onAllocate,
+  onDeallocate,
+  onRename,
+  onChangeTarget,
+  onDelete,
+}: {
+  goal: SavingTarget;
+  unallocated: number | null;
+  onBack: () => void;
+  onAllocate: (amount: number) => void;
+  onDeallocate: (amount: number) => void;
+  onRename: (name: string) => void;
+  onChangeTarget: (goalSats: number) => void;
+  onDelete: () => void;
+}) {
+  const [addAmount, setAddAmount] = useState("");
+  const [takeAmount, setTakeAmount] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(goal.name);
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetDraft, setTargetDraft] = useState(String(goal.goalSats));
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const progress = Math.min(100, (goal.allocatedSats / goal.goalSats) * 100);
+
+  return (
+    <div className="wrap">
+      <Hud onBack={onBack} right={KID_BADGE} />
+      <div className="screen">
+        {editingName ? (
+          <div className="row">
+            <input
+              type="text"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn sm"
+              onClick={() => {
+                onRename(nameDraft);
+                setEditingName(false);
+              }}
+            >
+              Save
+            </button>
+          </div>
+        ) : (
+          <h2 onClick={() => setEditingName(true)} style={{ cursor: "pointer" }}>
+            {goal.name} ✏️
+          </h2>
+        )}
+
+        <div className="card stack center">
+          <span className="jar-amount gold">{goal.allocatedSats.toLocaleString()} sats</span>
+          {editingTarget ? (
+            <div className="row">
+              <input
+                type="number"
+                value={targetDraft}
+                onChange={(e) => setTargetDraft(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn sm"
+                onClick={() => {
+                  const n = parseInt(targetDraft, 10);
+                  if (n > 0) onChangeTarget(n);
+                  setEditingTarget(false);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <span className="jar-goal" onClick={() => setEditingTarget(true)} style={{ cursor: "pointer" }}>
+              of {goal.goalSats.toLocaleString()} sats ✏️
+            </span>
+          )}
+          <div className="track">
+            <i style={{ width: `${progress}%` }} />
+          </div>
+          {progress >= 100 && <span className="chip ok">Goal reached! 🎉</span>}
+        </div>
+
+        <div className="card stack">
+          <label>Add from your wallet</label>
+          <p className="small">
+            {unallocated !== null ? `${unallocated.toLocaleString()} sats not in a goal yet` : "Checking your wallet…"}
+          </p>
+          <div className="row">
+            <input
+              type="number"
+              placeholder="e.g. 1000"
+              value={addAmount}
+              onChange={(e) => setAddAmount(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn sm"
+              onClick={() => {
+                onAllocate(parseInt(addAmount, 10) || 0);
+                setAddAmount("");
+              }}
+              disabled={!addAmount || !unallocated}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        <div className="card stack">
+          <label>Move back to your wallet</label>
+          <div className="row">
+            <input
+              type="number"
+              placeholder="e.g. 500"
+              value={takeAmount}
+              onChange={(e) => setTakeAmount(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn ghost sm"
+              onClick={() => {
+                onDeallocate(parseInt(takeAmount, 10) || 0);
+                setTakeAmount("");
+              }}
+              disabled={!takeAmount}
+            >
+              Move out
+            </button>
+          </div>
+        </div>
+
+        <p className="small">
+          Goals are just labels over your one real balance — moving sats between them is instant and free, but
+          nothing stops you from spending sats that were set aside for a goal. It's here to help you plan, not to
+          lock money away.
+        </p>
+
+        <div className="spacer" />
+
+        {confirmingDelete ? (
+          <div className="card stack">
+            <p className="small">
+              This deletes "{goal.name}". Any sats in it go back to "not in a goal yet" — nothing is spent.
+            </p>
+            <div className="row">
+              <button className="btn danger" onClick={onDelete} style={{ flex: 1 }}>
+                Delete
+              </button>
+              <button className="btn ghost" onClick={() => setConfirmingDelete(false)} style={{ flex: 1 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn danger" onClick={() => setConfirmingDelete(true)}>
+            Delete this goal
+          </button>
+        )}
       </div>
     </div>
   );
