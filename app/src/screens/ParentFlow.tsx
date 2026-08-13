@@ -711,7 +711,14 @@ function KidDetail({
         {budget && (
           <div className="card stack">
             <span className="small">ALLOWANCE USED THIS PERIOD</span>
-            <div className="track">
+            <div
+              className="track"
+              role="progressbar"
+              aria-valuenow={Math.floor(budget.used / 1000)}
+              aria-valuemin={0}
+              aria-valuemax={Math.floor(budget.total / 1000)}
+              aria-label="Allowance used this period"
+            >
               <i style={{ width: `${Math.min(100, (budget.used / Math.max(budget.total, 1)) * 100)}%` }} />
             </div>
             <span className="small">

@@ -356,6 +356,9 @@ function KidHome({
                   <span>
                     {goal.allocatedSats.toLocaleString()} / {goal.goalSats.toLocaleString()} sats
                   </span>
+                  {/* No role="progressbar" here: this bar sits inside a <button>, and its
+                      info (allocated/target sats) is already in the button's visible text,
+                      so a nested widget role would be redundant and an ARIA anti-pattern. */}
                   <div className="track" style={{ marginTop: 6 }}>
                     <i style={{ width: `${progress}%` }} />
                   </div>
@@ -498,7 +501,14 @@ function GoalDetail({
               of {goal.goalSats.toLocaleString()} sats ✏️
             </button>
           )}
-          <div className="track">
+          <div
+            className="track"
+            role="progressbar"
+            aria-valuenow={goal.allocatedSats}
+            aria-valuemin={0}
+            aria-valuemax={goal.goalSats}
+            aria-label={`${goal.name} progress`}
+          >
             <i style={{ width: `${progress}%` }} />
           </div>
           {progress >= 100 && <span className="chip ok">Goal reached! 🎉</span>}
