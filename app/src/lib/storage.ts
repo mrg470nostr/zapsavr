@@ -18,10 +18,15 @@ export type FamilyKid = {
   nwcUrl: string;
 };
 
+export type OwnWallet = {
+  nwcUrl: string;
+};
+
 export type ParentState = {
   role: "parent";
   pin?: string;
   kids: FamilyKid[];
+  ownWallet?: OwnWallet;
 };
 
 type AppState = KidState | ParentState;

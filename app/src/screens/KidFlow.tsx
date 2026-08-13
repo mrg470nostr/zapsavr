@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { ActionCard } from "../components/ActionCard";
 import { QrScan } from "../components/QrScan";
-import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, payInvoice, makeInvoice } from "../lib/nwc";
+import { ReceivePanel } from "../components/ReceivePanel";
+import { SendPanel } from "../components/SendPanel";
+import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
 import { loadState, saveState, clearState, type KidState } from "../lib/storage";
 
@@ -236,8 +237,8 @@ function KidHome({
           <ActionCard label="Offline payment" icon="📶" onClick={() => setMode("offline")} />
         </div>
 
-        {mode === "ask" && <AskForSats nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
-        {mode === "pay" && <PaySomeone nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
+        {mode === "ask" && <ReceivePanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
+        {mode === "pay" && <SendPanel nwcUrl={nwcUrl} onClose={() => { setMode("none"); refreshBalance(); }} />}
         {mode === "offline" && (
           <div className="stub">
             Offline, phone-to-phone payments are coming in a later version, once the community picks which Cashu
@@ -255,112 +256,6 @@ function KidHome({
           Disconnect this device
         </button>
       </div>
-    </div>
-  );
-}
-
-function AskForSats({ nwcUrl, onClose }: { nwcUrl: string; onClose: () => void }) {
-  const [amount, setAmount] = useState("");
-  const [invoice, setInvoice] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleCreate() {
-    const sats = parseInt(amount, 10);
-    if (!sats || sats <= 0) return;
-    setLoading(true);
-    setError("");
-    try {
-      const tx = await makeInvoice(nwcUrl, sats, "ZapSavr top-up");
-      setInvoice(tx.invoice);
-    } catch {
-      setError("Couldn't create a payment request. Try again in a moment.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="card stack">
-      <h3>Ask for sats</h3>
-      {invoice ? (
-        <>
-          <p className="small">Show this to whoever's sending you sats.</p>
-          <div className="qr-wrap">
-            <QRCodeSVG value={invoice} size={180} />
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="field">
-            <label>How many sats?</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 2000" />
-          </div>
-          {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
-          <button className="btn" onClick={handleCreate} disabled={!amount || loading}>
-            {loading ? "Creating…" : "Create request"}
-          </button>
-        </>
-      )}
-      <button className="btn ghost sm" onClick={onClose}>
-        Close
-      </button>
-    </div>
-  );
-}
-
-function PaySomeone({ nwcUrl, onClose }: { nwcUrl: string; onClose: () => void }) {
-  const [invoice, setInvoice] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  async function handlePay() {
-    setLoading(true);
-    setError("");
-    try {
-      await payInvoice(nwcUrl, invoice);
-      setSuccess(true);
-    } catch {
-      setError("That payment didn't go through — check the request or your allowance.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <div className="card stack center">
-        <span style={{ fontSize: 32 }}>✅</span>
-        <b>Paid!</b>
-        <button className="btn ghost sm" onClick={onClose}>
-          Done
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="card stack">
-      <h3>Pay</h3>
-      <div className="field">
-        <label>Payment request</label>
-        <QrScan onScan={setInvoice} />
-        <textarea
-          placeholder="Paste or scan the payment request"
-          value={invoice}
-          onChange={(e) => setInvoice(e.target.value)}
-          rows={4}
-          style={{ marginTop: 8 }}
-        />
-      </div>
-      {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
-      <button className="btn" onClick={handlePay} disabled={!invoice || loading}>
-        {loading ? "Paying…" : "Pay"}
-      </button>
-      <button className="btn ghost sm" onClick={onClose}>
-        Cancel
-      </button>
     </div>
   );
 }

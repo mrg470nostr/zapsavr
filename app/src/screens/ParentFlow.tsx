@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { PinEntry } from "../components/PinEntry";
-import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, getBudget, makeInvoice, listTransactions, type SimpleTx } from "../lib/nwc";
+import { ReceivePanel } from "../components/ReceivePanel";
+import { SendPanel } from "../components/SendPanel";
+import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, getBudget, listTransactions, type SimpleTx } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
 import {
   loadState,
@@ -16,7 +18,7 @@ import {
   type FamilyKid,
 } from "../lib/storage";
 
-type Step = "connect" | "pair" | "pin-setup" | "locked" | "family" | "kid";
+type Step = "connect" | "pair" | "pin-setup" | "locked" | "family" | "kid" | "own-connect" | "own";
 
 function currentFamily(): ParentState {
   const existing = loadState();
@@ -71,7 +73,7 @@ export function ParentFlow() {
         { id: newKidId(), nickname: "Leo (demo)", nwcUrl: demoUrlFor("leo") },
         { id: newKidId(), nickname: "Mia (demo)", nwcUrl: demoUrlFor("mia") },
       ];
-      saveState({ role: "parent", kids });
+      saveState({ role: "parent", kids, ownWallet: { nwcUrl: demoUrlFor("parent-own") } });
       setStep("family");
     } else {
       setNwcUrl(demoUrlFor(`kid-${newKidId()}`));
@@ -81,7 +83,7 @@ export function ParentFlow() {
 
   function handleConfirmPairing() {
     const newKid: FamilyKid = { id: newKidId(), nickname: kidNickname || "your kid", nwcUrl };
-    const updated: ParentState = { role: "parent", pin: family.pin, kids: [...family.kids, newKid] };
+    const updated: ParentState = { role: "parent", pin: family.pin, kids: [...family.kids, newKid], ownWallet: family.ownWallet };
     saveState(updated);
     setSelectedKidId(newKid.id);
     setKidNickname("");
@@ -125,6 +127,7 @@ export function ParentFlow() {
     family.kids.forEach((k) => {
       if (isDemoUrl(k.nwcUrl)) resetDemo(k.nwcUrl);
     });
+    if (family.ownWallet && isDemoUrl(family.ownWallet.nwcUrl)) resetDemo(family.ownWallet.nwcUrl);
     clearState();
     navigate("/");
   }
@@ -136,6 +139,34 @@ export function ParentFlow() {
     saveState(updated);
     setSelectedKidId(null);
     setStep(updated.kids.length === 0 ? "connect" : "family");
+  }
+
+  async function handleConnectOwnWallet(urlOverride?: string) {
+    const url = urlOverride ?? nwcUrl;
+    setError("");
+    if (!isValidNwcUrl(url)) {
+      setError("That doesn't look like a wallet connection string. It should start with nostr+walletconnect://");
+      return;
+    }
+    setChecking(true);
+    try {
+      await getBalanceSats(url);
+      const updated: ParentState = { ...family, ownWallet: { nwcUrl: url } };
+      saveState(updated);
+      setNwcUrl("");
+      setStep("family");
+    } catch {
+      setError("Couldn't reach that wallet connection. Double check it's still active.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function handleDisconnectOwnWallet() {
+    if (family.ownWallet && isDemoUrl(family.ownWallet.nwcUrl)) resetDemo(family.ownWallet.nwcUrl);
+    const updated: ParentState = { ...family, ownWallet: undefined };
+    saveState(updated);
+    setStep("family");
   }
 
   if (step === "connect") {
@@ -270,6 +301,56 @@ export function ParentFlow() {
     );
   }
 
+  if (step === "own-connect") {
+    return (
+      <div className="wrap">
+        <Hud onBack={() => setStep("family")} />
+        <div className="screen">
+          <div className="stack">
+            <h2>Connect your own wallet</h2>
+            <p className="lede">
+              This is for you — day-to-day spending and receiving, separate from any kid's budget. Create another
+              fresh connection in your wallet app (no need to cap it the way you would for a kid).
+            </p>
+          </div>
+          <div className="card stack">
+            <div className="field">
+              <label>Connection string from your wallet</label>
+              <textarea
+                placeholder="nostr+walletconnect://..."
+                value={nwcUrl}
+                onChange={(e) => setNwcUrl(e.target.value)}
+                rows={4}
+              />
+            </div>
+            {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
+            <button className="btn" onClick={() => handleConnectOwnWallet()} disabled={!nwcUrl || checking}>
+              {checking ? "Checking…" : "Connect"}
+            </button>
+            <button
+              className="btn ghost sm"
+              onClick={() => handleConnectOwnWallet(demoUrlFor("parent-own"))}
+              disabled={checking}
+            >
+              🧪 Try a demo (no wallet needed)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No ownWallet here (e.g. disconnected elsewhere) falls through to the family view below.
+  if (step === "own" && family.ownWallet) {
+    return (
+      <OwnWalletDetail
+        wallet={family.ownWallet}
+        onBack={() => setStep("family")}
+        onDisconnect={handleDisconnectOwnWallet}
+      />
+    );
+  }
+
   if (step === "kid" && selectedKidId) {
     const kid = family.kids.find((k) => k.id === selectedKidId);
     if (kid) {
@@ -290,6 +371,19 @@ export function ParentFlow() {
       <Hud />
       <div className="screen">
         <h2>Your family</h2>
+
+        {family.ownWallet ? (
+          <OwnWalletCard wallet={family.ownWallet} refreshTick={refreshTick} onClick={() => setStep("own")} />
+        ) : (
+          <button className="opt" onClick={() => { setNwcUrl(""); setStep("own-connect"); }}>
+            <span className="ico">👛</span>
+            <span className="t">
+              <b>Connect your own wallet</b>
+              <span>For your own spending, separate from the kids</span>
+            </span>
+          </button>
+        )}
+
         <div className="stack">
           {family.kids.map((kid) => (
             <KidCard
@@ -320,6 +414,180 @@ export function ParentFlow() {
         <button className="btn danger" onClick={handleDisconnectAll}>
           Disconnect everything
         </button>
+      </div>
+    </div>
+  );
+}
+
+function OwnWalletCard({
+  wallet,
+  onClick,
+  refreshTick,
+}: {
+  wallet: { nwcUrl: string };
+  onClick: () => void;
+  refreshTick: number;
+}) {
+  const [balance, setBalance] = useState<number | null>(null);
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    getBalanceSats(wallet.nwcUrl)
+      .then((sats) => {
+        if (cancelled) return;
+        setBalance(sats);
+        setStatus("ok");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet.nwcUrl, refreshTick]);
+
+  return (
+    <button className="opt" onClick={onClick} style={{ borderColor: "var(--line)" }}>
+      <span className="ico">👛</span>
+      <span className="t" style={{ flex: 1 }}>
+        <b>Your wallet</b>
+        <span>
+          {status === "loading" && "Checking…"}
+          {status === "error" && "Unreachable"}
+          {status === "ok" && `${balance?.toLocaleString()} sats`}
+        </span>
+      </span>
+      {isDemoUrl(wallet.nwcUrl) && <span className="chip">DEMO</span>}
+    </button>
+  );
+}
+
+function OwnWalletDetail({
+  wallet,
+  onBack,
+  onDisconnect,
+}: {
+  wallet: { nwcUrl: string };
+  onBack: () => void;
+  onDisconnect: () => void;
+}) {
+  const [balance, setBalance] = useState<number | null>(null);
+  const [txs, setTxs] = useState<SimpleTx[]>([]);
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  const [mode, setMode] = useState<"none" | "send" | "receive">("none");
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+
+  async function load() {
+    try {
+      const sats = await getBalanceSats(wallet.nwcUrl);
+      const history = await listTransactions(wallet.nwcUrl);
+      setBalance(sats);
+      setTxs(history);
+      setStatus("ok");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.nwcUrl]);
+
+  return (
+    <div className="wrap">
+      <Hud
+        onBack={onBack}
+        right={
+          <>
+            {isDemoUrl(wallet.nwcUrl) && <span className="chip">DEMO</span>}
+            <span className={`chip ${status === "ok" ? "ok" : status === "error" ? "err" : ""}`}>
+              {status === "ok" ? "Connected" : status === "error" ? "Unreachable" : "Checking…"}
+            </span>
+          </>
+        }
+      />
+      <div className="screen">
+        <h2>Your wallet</h2>
+
+        <div className="card stack">
+          <span className="small">CURRENT BALANCE</span>
+          {balance === null ? (
+            <p className="small">{status === "error" ? "Can't check right now" : "Loading…"}</p>
+          ) : (
+            <span className="jar-amount gold">{balance.toLocaleString()} sats</span>
+          )}
+        </div>
+
+        <div className="row">
+          <button className="btn" style={{ flex: 1 }} onClick={() => setMode("receive")}>
+            Receive
+          </button>
+          <button className="btn ghost" style={{ flex: 1 }} onClick={() => setMode("send")}>
+            Send
+          </button>
+        </div>
+
+        {mode === "receive" && (
+          <ReceivePanel
+            nwcUrl={wallet.nwcUrl}
+            title="Receive"
+            description="Received via ZapSavr"
+            onClose={() => {
+              setMode("none");
+              load();
+            }}
+          />
+        )}
+        {mode === "send" && (
+          <SendPanel
+            nwcUrl={wallet.nwcUrl}
+            failMessage="That payment didn't go through — check the request or your balance."
+            onClose={() => {
+              setMode("none");
+              load();
+            }}
+          />
+        )}
+
+        <div className="card stack">
+          <span className="small">RECENT ACTIVITY</span>
+          {txs.length === 0 ? (
+            <p className="small">Nothing yet.</p>
+          ) : (
+            txs.map((tx, i) => (
+              <div key={i} className="row" style={{ justifyContent: "space-between" }}>
+                <span className="small">{tx.description}</span>
+                <span className="small" style={{ color: tx.type === "incoming" ? "var(--ok)" : undefined }}>
+                  {tx.type === "incoming" ? "+" : "-"}
+                  {tx.amountSats.toLocaleString()} sats
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="spacer" />
+
+        {confirmingDisconnect ? (
+          <div className="card stack">
+            <p className="small">This removes your own wallet from ZapSavr on this device. Your kids' connections are unaffected.</p>
+            <div className="row">
+              <button className="btn danger" onClick={onDisconnect} style={{ flex: 1 }}>
+                Disconnect
+              </button>
+              <button className="btn ghost" onClick={() => setConfirmingDisconnect(false)} style={{ flex: 1 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn ghost sm" onClick={() => setConfirmingDisconnect(true)}>
+            Disconnect your wallet
+          </button>
+        )}
       </div>
     </div>
   );
@@ -446,9 +714,11 @@ function KidDetail({
           Send sats now
         </button>
         {showTopUp && (
-          <TopUp
+          <ReceivePanel
             nwcUrl={kid.nwcUrl}
-            onDone={() => {
+            title="Send sats now"
+            description="Allowance top-up"
+            onClose={() => {
               setShowTopUp(false);
               load();
             }}
@@ -495,58 +765,6 @@ function KidDetail({
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function TopUp({ nwcUrl, onDone }: { nwcUrl: string; onDone: () => void }) {
-  const [amount, setAmount] = useState("");
-  const [invoice, setInvoice] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleCreate() {
-    const sats = parseInt(amount, 10);
-    if (!sats || sats <= 0) return;
-    setLoading(true);
-    setError("");
-    try {
-      const tx = await makeInvoice(nwcUrl, sats, "Allowance top-up");
-      setInvoice(tx.invoice);
-    } catch {
-      setError("Couldn't create a payment request. Try again in a moment.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="card stack">
-      <h3>Send sats now</h3>
-      {invoice ? (
-        <>
-          <p className="small">
-            Scan this with your own wallet app to send it — ZapSavr never moves money on its own.
-          </p>
-          <div className="qr-wrap">
-            <QRCodeSVG value={invoice} size={180} />
-          </div>
-          <button className="btn ghost sm" onClick={onDone}>
-            Done
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="field">
-            <label>How many sats?</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 2000" />
-          </div>
-          {error && <p className="small" style={{ color: "var(--err)" }}>{error}</p>}
-          <button className="btn" onClick={handleCreate} disabled={!amount || loading}>
-            {loading ? "Creating…" : "Create request"}
-          </button>
-        </>
-      )}
     </div>
   );
 }
