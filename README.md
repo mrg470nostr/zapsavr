@@ -12,8 +12,13 @@ That string is Nostr Wallet Connect. The parent runs (or already has) a real Lig
 
 Regular fintech apps for kids (Greenlight, Google Wallet's family features, and similar) hand a child a debit card wired to a custodial ledger somewhere in a data center. ZapSavr hands a child a taste of what their parents in the Amantikir community already believe in: money that isn't permission-based, that can't be frozen by a third party, and that teaches patience because sats you're saving for something visibly grow instead of just existing as a number in someone else's database. The saving target isn't a gimmick bolted onto a bank app, it's the whole point, a hands-on lesson in what the Sound Money, Sound Life course calls low time preference.
 
+## Try it
+
+**https://mrg470nostr.github.io/zapsavr/** — live, deployed straight from `master` on every push. Tap "🧪 Try a demo" on either the parent or kid side to click through the whole thing with no real wallet.
+
 ## What's in this repository
 
+- `app/` — the actual working PWA (React + TypeScript + Vite). Start here to run, test, or change the code — see `app/README.md`.
 - `CLAUDE.md` — read this first if you're Claude Code. It's the compass for how to build this project.
 - `docs/PRD.md` — what we're building and for whom, in plain language.
 - `docs/ARCHITECTURE.md` — how the pieces fit: NWC, Cashu, the parent app, the kid app.
