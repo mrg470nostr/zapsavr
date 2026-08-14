@@ -20,6 +20,7 @@ Regular fintech apps for kids (Greenlight, Google Wallet's family features, and 
 
 - `app/` — the actual working PWA (React + TypeScript + Vite). Start here to run, test, or change the code — see `app/README.md`.
 - `CLAUDE.md` — read this first if you're Claude Code. It's the compass for how to build this project.
+- `docs/EXPLAINER.md` — the full picture in one document: what ZapSavr does and why it's built this way, for anyone who doesn't want to read every other doc first.
 - `docs/PRD.md` — what we're building and for whom, in plain language.
 - `docs/ARCHITECTURE.md` — how the pieces fit: NWC, Cashu, the parent app, the kid app.
 - `docs/ROADMAP.md` — the order we build things in, starting from the smallest working prototype.
