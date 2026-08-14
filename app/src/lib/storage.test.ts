@@ -6,6 +6,9 @@ import {
   isParentUnlocked,
   setParentUnlocked,
   newId,
+  recordFailedPinAttempt,
+  pinLockedUntil,
+  clearPinAttempts,
   type ParentState,
   type KidState,
 } from "./storage";
@@ -106,6 +109,48 @@ describe("parent session unlock — the local access-control gate", () => {
 
     expect(isParentUnlocked()).toBe(false);
     expect(loadState()).toBeNull();
+  });
+});
+
+describe("PIN attempt limiting — a soft lockout, never a permanent one", () => {
+  it("does not lock out the first few wrong attempts", () => {
+    for (let i = 0; i < 3; i++) recordFailedPinAttempt();
+    expect(pinLockedUntil()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("introduces a growing delay after repeated wrong attempts", () => {
+    for (let i = 0; i < 3; i++) recordFailedPinAttempt();
+    const untilAfter4 = recordFailedPinAttempt();
+    expect(untilAfter4).toBeGreaterThan(Date.now());
+
+    for (let i = 0; i < 2; i++) recordFailedPinAttempt();
+    const untilAfter7 = recordFailedPinAttempt();
+    expect(untilAfter7 - Date.now()).toBeGreaterThan(untilAfter4 - Date.now());
+  });
+
+  it("the delay always ends — never grows into a permanent lock", () => {
+    for (let i = 0; i < 20; i++) recordFailedPinAttempt();
+    const until = pinLockedUntil();
+    expect(until - Date.now()).toBeLessThanOrEqual(60_000);
+  });
+
+  it("clearPinAttempts resets the counter and any active lock", () => {
+    for (let i = 0; i < 10; i++) recordFailedPinAttempt();
+    expect(pinLockedUntil()).toBeGreaterThan(Date.now());
+
+    clearPinAttempts();
+
+    expect(pinLockedUntil()).toBe(0);
+  });
+
+  it("a successful unlock (clearState) also resets the attempt counter", () => {
+    saveState({ role: "parent", pin: "1234", kids: [] });
+    for (let i = 0; i < 10; i++) recordFailedPinAttempt();
+    expect(pinLockedUntil()).toBeGreaterThan(Date.now());
+
+    clearState();
+
+    expect(pinLockedUntil()).toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
@@ -8,6 +8,7 @@ import { SendPanel } from "../components/SendPanel";
 import { CopyField } from "../components/CopyField";
 import { isValidNwcUrl, isDemoUrl, demoUrlFor, getBalanceSats, getBudget, listTransactions, type SimpleTx } from "../lib/nwc";
 import { resetDemo } from "../lib/demo";
+import { hasHotWallet } from "../lib/hotwallet-storage";
 import {
   loadState,
   saveState,
@@ -15,11 +16,30 @@ import {
   isParentUnlocked,
   setParentUnlocked,
   newKidId,
+  recordFailedPinAttempt,
+  pinLockedUntil,
+  clearPinAttempts,
   type ParentState,
   type FamilyKid,
 } from "../lib/storage";
 
-type Step = "connect" | "pair" | "pin-setup" | "locked" | "family" | "kid" | "own-connect" | "own";
+type Step =
+  | "connect"
+  | "pair"
+  | "pin-setup"
+  | "locked"
+  | "family"
+  | "kid"
+  | "own-connect"
+  | "own"
+  | "hotwallet-setup"
+  | "hotwallet";
+
+// Lazy: these pull in the multi-megabyte Breez SDK + WASM, so families who
+// never opt into the hot wallet never download it. See lib/hotwallet-sdk.ts.
+const HotWalletCard = lazy(() => import("./HotWallet").then((m) => ({ default: m.HotWalletCard })));
+const HotWalletSetup = lazy(() => import("./HotWallet").then((m) => ({ default: m.HotWalletSetup })));
+const HotWalletDetail = lazy(() => import("./HotWallet").then((m) => ({ default: m.HotWalletDetail })));
 
 function currentFamily(): ParentState {
   const existing = loadState();
@@ -45,9 +65,23 @@ export function ParentFlow() {
   const [pinError, setPinError] = useState("");
   const [pinShake, setPinShake] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [afterPinStep, setAfterPinStep] = useState<Step | null>(null);
+  const [lockedUntil, setLockedUntil] = useState(() => pinLockedUntil());
+  const [lockRemainingMs, setLockRemainingMs] = useState(() => Math.max(0, pinLockedUntil() - Date.now()));
+  const [confirmingForgotPin, setConfirmingForgotPin] = useState(false);
 
   const family = currentFamily();
   const isFirstKid = family.kids.length === 0;
+
+  useEffect(() => {
+    if (lockRemainingMs <= 0) return;
+    const id = setInterval(() => {
+      const remaining = Math.max(0, lockedUntil - Date.now());
+      setLockRemainingMs(remaining);
+      if (remaining <= 0) clearInterval(id);
+    }, 500);
+    return () => clearInterval(id);
+  }, [lockedUntil, lockRemainingMs]);
 
   async function handleConnect(urlOverride?: string) {
     const url = urlOverride ?? nwcUrl;
@@ -106,20 +140,35 @@ export function ParentFlow() {
       const prev = currentFamily();
       saveState({ ...prev, pin });
       setParentUnlocked();
-      setStep("family");
+      setStep(afterPinStep ?? "family");
+      setAfterPinStep(null);
     } else {
       setPinError("Those didn't match — try again.");
       setPinDraft(null);
     }
   }
 
+  function handleStartHotWalletSetup() {
+    if (!family.pin) {
+      setAfterPinStep("hotwallet-setup");
+      setPinDraft(null);
+      setStep("pin-setup");
+    } else {
+      setStep("hotwallet-setup");
+    }
+  }
+
   function handleUnlockEntry(pin: string) {
     if (family.pin && pin === family.pin) {
+      clearPinAttempts();
       setParentUnlocked();
       setStep("family");
     } else {
+      const until = recordFailedPinAttempt();
+      setLockedUntil(until);
+      setLockRemainingMs(Math.max(0, until - Date.now()));
       setPinShake(true);
-      setPinError("Wrong PIN, try again.");
+      setPinError(until > Date.now() ? "Too many wrong tries — wait a moment." : "Wrong PIN, try again.");
       setTimeout(() => setPinShake(false), 300);
     }
   }
@@ -287,6 +336,7 @@ export function ParentFlow() {
   }
 
   if (step === "locked") {
+    const locked = lockRemainingMs > 0;
     return (
       <div className="wrap">
         <Hud />
@@ -300,11 +350,33 @@ export function ParentFlow() {
               {pinError}
             </p>
           )}
-          <PinEntry onComplete={handleUnlockEntry} shake={pinShake} />
+          {locked ? (
+            <p className="small center">Too many wrong tries. Try again in {Math.ceil(lockRemainingMs / 1000)}s.</p>
+          ) : (
+            <PinEntry onComplete={handleUnlockEntry} shake={pinShake} />
+          )}
           <div className="spacer" />
-          <button className="btn ghost sm" onClick={handleDisconnectAll}>
-            Forgot it? Disconnect and set up again
-          </button>
+          {confirmingForgotPin ? (
+            <div className="card stack">
+              <p className="small">
+                This clears your family's PIN, kids, and connections on this device so you can set up again.
+                {hasHotWallet() &&
+                  " You also have an embedded hot wallet — this won't delete it, but you'll only be able to get back into it with your PIN or your 12-word backup phrase. Without either, any sats in it are gone for good."}
+              </p>
+              <div className="row">
+                <button className="btn danger" onClick={handleDisconnectAll} style={{ flex: 1 }}>
+                  Disconnect
+                </button>
+                <button className="btn ghost" onClick={() => setConfirmingForgotPin(false)} style={{ flex: 1 }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn ghost sm" onClick={() => setConfirmingForgotPin(true)}>
+              Forgot it? Disconnect and set up again
+            </button>
+          )}
         </div>
       </div>
     );
@@ -361,6 +433,37 @@ export function ParentFlow() {
     );
   }
 
+  if (step === "hotwallet-setup" && family.pin) {
+    return (
+      <Suspense fallback={<div className="wrap"><Hud /><div className="screen"><p className="small">Loading…</p></div></div>}>
+        <HotWalletSetup
+          pin={family.pin}
+          onDone={() => {
+            saveState({ ...currentFamily(), hotWalletNetwork: "mainnet" });
+            setStep("hotwallet");
+          }}
+          onCancel={() => setStep("family")}
+        />
+      </Suspense>
+    );
+  }
+
+  if (step === "hotwallet" && hasHotWallet() && family.pin) {
+    return (
+      <Suspense fallback={<div className="wrap"><Hud /><div className="screen"><p className="small">Loading…</p></div></div>}>
+        <HotWalletDetail
+          pin={family.pin}
+          network={family.hotWalletNetwork ?? "mainnet"}
+          onBack={() => setStep("family")}
+          onDeleted={() => {
+            saveState({ ...currentFamily(), hotWalletNetwork: undefined });
+            setStep("family");
+          }}
+        />
+      </Suspense>
+    );
+  }
+
   if (step === "kid" && selectedKidId) {
     const kid = family.kids.find((k) => k.id === selectedKidId);
     if (kid) {
@@ -390,6 +493,20 @@ export function ParentFlow() {
             <span className="t">
               <b>Connect your own wallet</b>
               <span>For your own spending, separate from the kids</span>
+            </span>
+          </button>
+        )}
+
+        {hasHotWallet() ? (
+          <Suspense fallback={null}>
+            <HotWalletCard onClick={() => setStep("hotwallet")} />
+          </Suspense>
+        ) : (
+          <button className="opt" onClick={handleStartHotWalletSetup}>
+            <span className="ico">⚡₿</span>
+            <span className="t">
+              <b>Embedded hot wallet</b>
+              <span>Experimental — on-chain + Lightning, held in this app</span>
             </span>
           </button>
         )}

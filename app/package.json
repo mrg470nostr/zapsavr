@@ -11,8 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@getalby/sdk": "^8.0.3",
-    "light-bolt11-decoder": "^3.2.0",
+    "@breeztech/breez-sdk-spark": "0.22.0",
+    "@getalby/sdk": "8.0.3",
+    "@scure/bip39": "2.3.0",
+    "light-bolt11-decoder": "3.2.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

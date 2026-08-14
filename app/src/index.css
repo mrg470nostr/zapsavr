@@ -214,6 +214,9 @@ textarea { resize: vertical; min-height: 72px; font-family: monospace; font-size
 
 .qr-wrap { display: flex; justify-content: center; padding: 16px; background: #fff; border: 1px solid var(--line-soft); border-radius: 14px; }
 
+.word-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; }
+.word-grid span { font-family: monospace; }
+
 .opt {
   display: flex; align-items: center; gap: 14px; text-align: left; width: 100%;
   padding: 18px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line-soft);

@@ -36,6 +36,13 @@ export type ParentState = {
   pin?: string;
   kids: FamilyKid[];
   ownWallet?: OwnWallet;
+  // Experimental, opt-in, entirely separate from ownWallet above (which
+  // connects to a wallet elsewhere via NWC). This one flags that ZapSavr
+  // itself is holding a seed — see docs/ARCHITECTURE.md "Embedded hot
+  // wallet". The encrypted seed itself lives in its own storage key
+  // (lib/hotwallet.ts), never here, so this state can be freely inspected
+  // without ever containing key material.
+  hotWalletNetwork?: "mainnet" | "regtest";
 };
 
 type AppState = KidState | ParentState;
@@ -86,6 +93,7 @@ export function saveState(state: AppState) {
 export function clearState() {
   localStorage.removeItem(KEY);
   sessionStorage.removeItem(UNLOCK_KEY);
+  clearPinAttempts();
 }
 
 const UNLOCK_KEY = "zapsavr.parentUnlocked";
@@ -104,3 +112,49 @@ export function newId(): string {
 
 // Kept for existing call sites.
 export const newKidId = newId;
+
+// ---------- PIN attempt limiting ----------
+//
+// A soft lockout, not a permanent one: the delay always ends on its own, so
+// a parent can never be permanently locked out of their own funds by this
+// alone (that would be worse than the brute-force risk it's guarding
+// against). Persisted in localStorage, not sessionStorage, so closing and
+// reopening the tab doesn't reset the counter — see docs/SECURITY.md.
+
+const PIN_ATTEMPTS_KEY = "zapsavr.pinAttempts.v1";
+
+type PinAttemptState = { count: number; lockedUntil: number };
+
+function loadPinAttemptState(): PinAttemptState {
+  try {
+    const raw = localStorage.getItem(PIN_ATTEMPTS_KEY);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    return JSON.parse(raw) as PinAttemptState;
+  } catch {
+    return { count: 0, lockedUntil: 0 };
+  }
+}
+
+function delayForAttemptMs(count: number): number {
+  if (count < 4) return 0;
+  if (count < 7) return 10_000;
+  if (count < 10) return 30_000;
+  return 60_000;
+}
+
+// Returns the timestamp (ms) the lockout lasts until, so the caller can show a countdown.
+export function recordFailedPinAttempt(): number {
+  const prev = loadPinAttemptState();
+  const count = prev.count + 1;
+  const lockedUntil = Date.now() + delayForAttemptMs(count);
+  localStorage.setItem(PIN_ATTEMPTS_KEY, JSON.stringify({ count, lockedUntil }));
+  return lockedUntil;
+}
+
+export function pinLockedUntil(): number {
+  return loadPinAttemptState().lockedUntil;
+}
+
+export function clearPinAttempts() {
+  localStorage.removeItem(PIN_ATTEMPTS_KEY);
+}
