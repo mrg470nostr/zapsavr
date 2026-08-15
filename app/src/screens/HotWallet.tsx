@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Hud } from "../components/Hud";
 import { CopyField } from "../components/CopyField";
+import { makeInvoice, isDemoUrl } from "../lib/nwc";
 import {
   encryptMnemonic,
   decryptMnemonic,
@@ -27,18 +28,27 @@ import {
   type SimpleHotWalletTx,
 } from "../lib/hotwallet-sdk";
 import type { BreezSdk } from "@breeztech/breez-sdk-spark/web";
+import type { FamilyKid } from "../lib/storage";
 
 // Module-level, not persisted anywhere: avoids re-decrypting the mnemonic and
 // re-connecting on every navigation within the same session. Cleared on
 // wallet deletion or full app reload.
 let cachedSdk: BreezSdk | null = null;
 
+// Breez requires this on mainnet (not regtest) purely to rate-limit access
+// to their infrastructure — it doesn't control funds, those stay entirely
+// with the seed above, so it's fine for it to end up in the public bundle
+// the same way Breez's own browser SDK examples set it. See
+// docs/ARCHITECTURE.md "Embedded hot wallet" for the full reasoning and
+// docs/RUNBOOK.md for how to actually get one.
+const BREEZ_API_KEY = import.meta.env.VITE_BREEZ_API_KEY as string | undefined;
+
 async function getOrConnectSdk(pin: string, network: HotWalletNetwork): Promise<BreezSdk> {
   if (cachedSdk) return cachedSdk;
   const encrypted = loadEncryptedMnemonic();
   if (!encrypted) throw new Error("No hot wallet on this device.");
   const mnemonic = await decryptMnemonic(encrypted, pin);
-  cachedSdk = await connectHotWallet(mnemonic, network);
+  cachedSdk = await connectHotWallet(mnemonic, network, BREEZ_API_KEY);
   return cachedSdk;
 }
 
@@ -280,11 +290,13 @@ export function HotWalletSetup({
 export function HotWalletDetail({
   pin,
   network,
+  kids,
   onBack,
   onDeleted,
 }: {
   pin: string;
   network: HotWalletNetwork;
+  kids: FamilyKid[];
   onBack: () => void;
   onDeleted: () => void;
 }) {
@@ -292,7 +304,7 @@ export function HotWalletDetail({
   const [errorMsg, setErrorMsg] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [txs, setTxs] = useState<SimpleHotWalletTx[]>([]);
-  const [mode, setMode] = useState<"none" | "send" | "receive">("none");
+  const [mode, setMode] = useState<"none" | "send-choice" | "send-kid" | "send-paste" | "receive">("none");
   const [receiveMode, setReceiveMode] = useState<"choice" | "onchain" | "lightning">("choice");
   const [receiveResult, setReceiveResult] = useState<string | null>(null);
   const [receiveAmount, setReceiveAmount] = useState("");
@@ -303,6 +315,11 @@ export function HotWalletDetail({
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
   const [sendOk, setSendOk] = useState(false);
+  const [kidSendSelected, setKidSendSelected] = useState<FamilyKid | null>(null);
+  const [kidSendAmount, setKidSendAmount] = useState("");
+  const [kidSendBusy, setKidSendBusy] = useState(false);
+  const [kidSendError, setKidSendError] = useState("");
+  const [kidSendOk, setKidSendOk] = useState(false);
   const [revealedMnemonic, setRevealedMnemonic] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -372,6 +389,31 @@ export function HotWalletDetail({
     }
   }
 
+  async function handleSendToKid(kid: FamilyKid, amountSats: number) {
+    setKidSendError("");
+    setKidSendOk(false);
+    setKidSendBusy(true);
+    try {
+      const description = "Allowance top-up";
+      if (isDemoUrl(kid.nwcUrl)) {
+        // Demo kids have no real invoice to pay — makeInvoice's demo path
+        // credits their fake balance directly as a side effect, so there's
+        // nothing real to send from the hot wallet here.
+        await makeInvoice(kid.nwcUrl, amountSats, description);
+      } else {
+        const sdk = await getOrConnectSdk(pin, network);
+        const invoice = await makeInvoice(kid.nwcUrl, amountSats, description);
+        await sendHotWalletPayment(sdk, invoice.invoice);
+        await load();
+      }
+      setKidSendOk(true);
+    } catch {
+      setKidSendError("That didn't go through — check the kid's connection, your balance, or try again.");
+    } finally {
+      setKidSendBusy(false);
+    }
+  }
+
   async function handleViewBackup() {
     const encrypted = loadEncryptedMnemonic();
     if (!encrypted) return;
@@ -428,10 +470,102 @@ export function HotWalletDetail({
               >
                 Receive
               </button>
-              <button className="btn ghost" style={{ flex: 1 }} onClick={() => setMode("send")}>
+              <button
+                className="btn ghost"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  setMode("send-choice");
+                  setKidSendSelected(null);
+                  setKidSendAmount("");
+                  setKidSendError("");
+                  setKidSendOk(false);
+                }}
+              >
                 Send
               </button>
             </div>
+
+            {mode === "send-choice" && (
+              <div className="card stack">
+                {kids.length > 0 && (
+                  <button className="btn" onClick={() => setMode("send-kid")}>
+                    👦 Send to a kid
+                  </button>
+                )}
+                <button className="btn ghost" onClick={() => setMode("send-paste")}>
+                  🔗 Paste a payment request
+                </button>
+                <button className="btn ghost sm" onClick={() => setMode("none")}>
+                  Close
+                </button>
+              </div>
+            )}
+
+            {mode === "send-kid" && !kidSendSelected && (
+              <div className="card stack">
+                <span className="small">SEND TO WHICH KID?</span>
+                {kids.map((kid) => (
+                  <button key={kid.id} className="opt" onClick={() => setKidSendSelected(kid)}>
+                    <span className="ico">🧒</span>
+                    <span className="t">
+                      <b>{kid.nickname}</b>
+                    </span>
+                    {isDemoUrl(kid.nwcUrl) && <span className="chip">DEMO</span>}
+                  </button>
+                ))}
+                <button className="btn ghost sm" onClick={() => setMode("send-choice")}>
+                  Back
+                </button>
+              </div>
+            )}
+
+            {mode === "send-kid" && kidSendSelected && (
+              <div className="card stack">
+                <span className="small">SEND TO {kidSendSelected.nickname.toUpperCase()}</span>
+                {kidSendOk ? (
+                  <>
+                    <p className="small" style={{ color: "var(--ok)" }}>
+                      Sent {kidSendAmount} sats to {kidSendSelected.nickname}.
+                    </p>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => {
+                        setMode("none");
+                        setKidSendSelected(null);
+                        setKidSendAmount("");
+                        setKidSendOk(false);
+                      }}
+                    >
+                      Close
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="field">
+                      <label htmlFor="hw-kid-send-amount">Amount (sats)</label>
+                      <input
+                        id="hw-kid-send-amount"
+                        type="number"
+                        min={1}
+                        value={kidSendAmount}
+                        onChange={(e) => setKidSendAmount(e.target.value)}
+                      />
+                    </div>
+                    {kidSendError && <p className="small" style={{ color: "var(--err)" }}>{kidSendError}</p>}
+                    <button
+                      className="btn"
+                      disabled={!kidSendAmount || Number(kidSendAmount) <= 0 || kidSendBusy}
+                      onClick={() => handleSendToKid(kidSendSelected, Math.floor(Number(kidSendAmount)))}
+                    >
+                      {kidSendBusy ? "Sending…" : `Send to ${kidSendSelected.nickname}`}
+                    </button>
+                    <button className="btn ghost sm" onClick={() => setKidSendSelected(null)}>
+                      Choose a different kid
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {mode === "receive" && (
               <div className="card stack">
@@ -492,7 +626,7 @@ export function HotWalletDetail({
               </div>
             )}
 
-            {mode === "send" && (
+            {mode === "send-paste" && (
               <div className="card stack">
                 <div className="field">
                   <label htmlFor="hw-send-input">Bitcoin address, Lightning invoice, or LNURL</label>

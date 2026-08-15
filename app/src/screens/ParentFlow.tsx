@@ -454,6 +454,7 @@ export function ParentFlow() {
         <HotWalletDetail
           pin={family.pin}
           network={family.hotWalletNetwork ?? "mainnet"}
+          kids={family.kids}
           onBack={() => setStep("family")}
           onDeleted={() => {
             saveState({ ...currentFamily(), hotWalletNetwork: undefined });

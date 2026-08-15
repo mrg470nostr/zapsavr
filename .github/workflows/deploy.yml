@@ -34,6 +34,13 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+        env:
+          # Rate-limits access to Breez's infra for the embedded hot wallet
+          # (mainnet only) — doesn't control funds, safe to end up in the
+          # public bundle. See docs/RUNBOOK.md for how to get one; builds
+          # fine with this unset, mainnet hot-wallet connections just won't
+          # work until it's added as a repo secret.
+          VITE_BREEZ_API_KEY: ${{ secrets.VITE_BREEZ_API_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist
