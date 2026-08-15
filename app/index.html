@@ -10,35 +10,31 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ZapSavr" />
+    <!--
+      Everything this app loads is same-origin (no CDN, no external fonts) —
+      so this can be strict. 'wasm-unsafe-eval' is the narrow, WASM-specific
+      allowance the embedded hot wallet's Breez SDK needs, not the broader
+      'unsafe-eval'. connect-src stays broad (any https:/wss:) because the
+      hot wallet and NWC both make real-time calls to third-party Lightning
+      infrastructure whose exact hostnames aren't hardcoded here — narrowing
+      this without knowing them would risk silently breaking payments.
+      script-src has no 'unsafe-inline', which is *why* the two scripts
+      below are external files (theme-init.js, decode-redirect.js) instead
+      of inline — an inline <script> here would be blocked outright, found
+      by actually loading the page with this CSP active, not assumed.
+      frame-ancestors is deliberately left out: browsers ignore it entirely
+      when set via <meta> (only an HTTP response header can enforce it),
+      and GitHub Pages' static hosting gives no way to set custom headers —
+      so it would just be a silent no-op if included. See docs/SECURITY.md
+      for the reasoning and what this does/doesn't cover.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
     <title>ZapSavr</title>
-    <script>
-      // Applied before first paint so switching themes doesn't flash the
-      // wrong one for a frame. Explicit choice wins; otherwise follow the
-      // OS preference (the CSS media query below handles that case too).
-      (function () {
-        try {
-          var stored = localStorage.getItem('zapsavr.theme');
-          if (stored === 'light' || stored === 'dark') {
-            document.documentElement.setAttribute('data-theme', stored);
-            var meta = document.querySelector('meta[name="theme-color"]');
-            if (meta) meta.setAttribute('content', stored === 'light' ? '#f7f1e3' : '#0c1216');
-          }
-        } catch {}
-      })();
-    </script>
-    <script>
-      // Decode the path 404.html redirected here (see public/404.html).
-      (function () {
-        var params = new URLSearchParams(window.location.search);
-        var p = params.get('p');
-        if (p === null) return;
-        var q = params.get('q');
-        var newUrl =
-          window.location.pathname.replace(/\/$/, '') + '/' + p +
-          (q ? '?' + q : '') + window.location.hash;
-        window.history.replaceState(null, '', newUrl);
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
+    <script src="/decode-redirect.js"></script>
   </head>
   <body>
     <div id="root"></div>
